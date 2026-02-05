@@ -36,6 +36,17 @@ yarn-error.log*
 # vercel
 .vercel
 
+# editor/tool configs
+.agents/
+.claude/
+.cursor/
+.opencode/
+
+# python virtual environments
+venv/
+scripts/venv/
+__pycache__/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

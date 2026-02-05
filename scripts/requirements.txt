@@ -1,0 +1,10 @@
+# Requirements for sample generation
+# Run: pip install -r scripts/requirements.txt
+
+torch>=2.0.0
+torchaudio>=2.0.0
+audiocraft>=1.0.0
+
+# Optional: for better audio processing
+scipy
+numpy

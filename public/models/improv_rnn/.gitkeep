@@ -1,0 +1,8 @@
+# Magenta.js Models Directory
+
+This directory is reserved for cached ML models.
+
+Models are fetched from Google's CDN at runtime and cached in IndexedDB:
+- improv_rnn: https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/chord_pitches_improv
+
+The models are approximately 8MB and are cached for offline use after first load.
