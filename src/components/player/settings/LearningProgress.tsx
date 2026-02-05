@@ -19,7 +19,7 @@ export function LearningProgress({ exploitationRatio, totalSongs }: LearningProg
       <div className="glass-light rounded-xl p-5">
         <div className="flex justify-between items-center mb-3">
           <span className="text-text-muted text-xs">Personalization</span>
-          <span className="text-text-bright text-xs font-mono">
+          <span className="text-text-bright text-xs">
             {Math.round(exploitationRatio * 100)}%
           </span>
         </div>

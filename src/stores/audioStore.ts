@@ -1,14 +1,15 @@
 import { create } from 'zustand';
-import { audioEngine, type EngineState } from '@/lib/audio/engine';
-import { handleExplicitLike, handleExplicitDislike } from '@/lib/preferences/feedback';
+import { audioEngine, type EngineState, type NoiseType } from '@/lib/audio/engine';
+import { handleExplicitLike, handleExplicitDislike, isTrackingSong } from '@/lib/preferences/feedback';
 
 interface AudioStore {
   isInitialized: boolean;
   isPlaying: boolean;
   bpm: number;
   currentKey: string;
-  currentParams: EngineState['currentParams'];
   songId: string | null;
+  progression: string[];
+  progressIndex: number;
 
   volume: number;
   isLoading: boolean;
@@ -16,7 +17,6 @@ interface AudioStore {
 
   samplesLoading: boolean;
   samplesLoaded: boolean;
-  activeLayers: string[];
 
   initialize: () => Promise<void>;
   play: () => Promise<void>;
@@ -24,6 +24,8 @@ interface AudioStore {
   togglePlayback: () => Promise<void>;
   generate: () => Promise<void>;
   setVolume: (volume: number) => void;
+  setNoiseType: (type: NoiseType) => void;
+  setNoiseVolume: (volume: number) => void;
   like: () => Promise<void>;
   dislike: () => Promise<void>;
   clearError: () => void;
@@ -38,30 +40,29 @@ export const useAudioStore = create<AudioStore>((set, get) => {
         isPlaying: state.isPlaying,
         bpm: state.bpm,
         currentKey: state.currentKey,
-        currentParams: state.currentParams,
         songId: state.songId,
         samplesLoading: state.samplesLoading,
         samplesLoaded: state.samplesLoaded,
-        activeLayers: state.activeLayers,
+        progression: state.progression,
+        progressIndex: state.progressIndex,
       });
     });
-
   }
 
   return {
     isInitialized: false,
     isPlaying: false,
-    bpm: 80,
-    currentKey: 'Cm',
-    currentParams: null,
+    bpm: 78,
+    currentKey: 'C',
     songId: null,
+    progression: [],
+    progressIndex: 0,
     volume: 0.8,
     isLoading: false,
     error: null,
 
     samplesLoading: false,
     samplesLoaded: false,
-    activeLayers: [],
 
     initialize: async () => {
       set({ isLoading: true });
@@ -123,12 +124,41 @@ export const useAudioStore = create<AudioStore>((set, get) => {
       }
     },
 
+    setNoiseType: (type: NoiseType) => {
+      if (get().isInitialized) {
+        audioEngine.setNoiseType(type);
+      }
+    },
+
+    setNoiseVolume: (volume: number) => {
+      if (get().isInitialized) {
+        audioEngine.setNoiseVolume(volume);
+      }
+    },
+
     like: async () => {
-      await handleExplicitLike();
+      // Send explicit like feedback to the bandit
+      if (isTrackingSong()) {
+        try {
+          await handleExplicitLike();
+          console.log('Liked song in key:', get().currentKey);
+        } catch (err) {
+          console.debug('Error recording like:', err);
+        }
+      }
     },
 
     dislike: async () => {
-      await handleExplicitDislike();
+      // Send explicit dislike feedback to the bandit
+      if (isTrackingSong()) {
+        try {
+          await handleExplicitDislike();
+          console.log('Disliked song in key:', get().currentKey);
+        } catch (err) {
+          console.debug('Error recording dislike:', err);
+        }
+      }
+      // Skip to new progression with bandit-selected params
       await get().generate();
     },
 

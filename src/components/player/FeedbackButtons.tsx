@@ -1,8 +1,8 @@
 'use client';
 
 import { memo, useState, useCallback, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { ThumbsUp, ThumbsDown } from 'lucide-react';
+import { GlassButton } from '../ui';
 
 interface FeedbackButtonsProps {
   onLike: () => void;
@@ -37,29 +37,25 @@ export const FeedbackButtons = memo(function FeedbackButtons({ onLike, onDislike
 
   return (
     <div className="flex items-center gap-6 md:gap-8">
-      <motion.button
+      <GlassButton
+        variant="default"
+        size="lg-responsive"
         onClick={handleDislike}
-        className={`
-          p-3 md:p-4 rounded-full transition-colors
-          ${disliked ? 'text-error' : 'text-text-muted hover:text-text'}
-        `}
-        whileTap={{ scale: 0.9 }}
+        className={disliked ? 'text-error' : 'text-text-muted hover:text-text'}
         aria-label="Dislike this song"
       >
-        <ThumbsDown className="w-6 h-6 md:w-7 md:h-7" fill={disliked ? 'currentColor' : 'none'} />
-      </motion.button>
+        <ThumbsDown fill={disliked ? 'currentColor' : 'none'} />
+      </GlassButton>
 
-      <motion.button
+      <GlassButton
+        variant="default"
+        size="lg-responsive"
         onClick={handleLike}
-        className={`
-          p-3 md:p-4 rounded-full transition-colors
-          ${liked ? 'text-success' : 'text-text-muted hover:text-text'}
-        `}
-        whileTap={{ scale: 0.9 }}
+        className={liked ? 'text-success' : 'text-text-muted hover:text-text'}
         aria-label="Like this song"
       >
-        <ThumbsUp className="w-6 h-6 md:w-7 md:h-7" fill={liked ? 'currentColor' : 'none'} />
-      </motion.button>
+        <ThumbsUp fill={liked ? 'currentColor' : 'none'} />
+      </GlassButton>
     </div>
   );
 });

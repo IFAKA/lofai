@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+export type NoiseType = 'off' | 'white' | 'pink' | 'brown';
+
 interface SettingsStore {
   bpmMin: number;
   bpmMax: number;
@@ -12,11 +14,28 @@ interface SettingsStore {
 
   backgroundEnabled: boolean;
 
+  // Focus/ADHD features
+  noiseType: NoiseType;
+  noiseVolume: number;
+  focusTimerMinutes: number | null;
+  focusTimerEndTime: number | null;
+  focusSessionStart: number | null;
+  showAdvancedSettings: boolean;
+
   setBpmRange: (min: number, max: number) => void;
   setExplorationLevel: (level: number) => void;
   setSleepTimer: (minutes: number | null) => void;
   clearSleepTimer: () => void;
   setBackgroundEnabled: (enabled: boolean) => void;
+
+  // Focus/ADHD actions
+  setNoiseType: (type: NoiseType) => void;
+  setNoiseVolume: (volume: number) => void;
+  setFocusTimer: (minutes: number | null) => void;
+  clearFocusTimer: () => void;
+  startFocusSession: () => void;
+  endFocusSession: () => void;
+  setShowAdvancedSettings: (show: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -30,7 +49,15 @@ export const useSettingsStore = create<SettingsStore>()(
       sleepTimerMinutes: null,
       sleepTimerEndTime: null,
 
-      backgroundEnabled: true,
+      backgroundEnabled: false, // OFF by default for ADHD focus
+
+      // Focus/ADHD defaults
+      noiseType: 'pink',
+      noiseVolume: 0.3,
+      focusTimerMinutes: null,
+      focusTimerEndTime: null,
+      focusSessionStart: null,
+      showAdvancedSettings: false,
 
       setBpmRange: (min, max) => {
         const clampedMin = Math.max(60, Math.min(100, min));
@@ -60,6 +87,42 @@ export const useSettingsStore = create<SettingsStore>()(
       setBackgroundEnabled: (enabled) => {
         set({ backgroundEnabled: enabled });
       },
+
+      // Focus/ADHD actions
+      setNoiseType: (type) => {
+        set({ noiseType: type });
+      },
+
+      setNoiseVolume: (volume) => {
+        set({ noiseVolume: Math.max(0, Math.min(1, volume)) });
+      },
+
+      setFocusTimer: (minutes) => {
+        if (minutes === null) {
+          set({ focusTimerMinutes: null, focusTimerEndTime: null });
+        } else {
+          set({
+            focusTimerMinutes: minutes,
+            focusTimerEndTime: Date.now() + minutes * 60 * 1000,
+          });
+        }
+      },
+
+      clearFocusTimer: () => {
+        set({ focusTimerMinutes: null, focusTimerEndTime: null });
+      },
+
+      startFocusSession: () => {
+        set({ focusSessionStart: Date.now() });
+      },
+
+      endFocusSession: () => {
+        set({ focusSessionStart: null });
+      },
+
+      setShowAdvancedSettings: (show) => {
+        set({ showAdvancedSettings: show });
+      },
     }),
     {
       name: 'lofai-settings',
@@ -68,6 +131,10 @@ export const useSettingsStore = create<SettingsStore>()(
         bpmMax: state.bpmMax,
         explorationLevel: state.explorationLevel,
         backgroundEnabled: state.backgroundEnabled,
+        // Persist noise preferences (not timers)
+        noiseType: state.noiseType,
+        noiseVolume: state.noiseVolume,
+        showAdvancedSettings: state.showAdvancedSettings,
       }),
     }
   )

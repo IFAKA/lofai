@@ -1,18 +1,39 @@
 'use client';
 
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { GenerationParams } from '@/lib/preferences/types';
 
 interface SongInfoProps {
-  params: GenerationParams | null;
-  bpm: number;
-  currentKey: string;
+  focusSessionStart: number | null;
   isVisible: boolean;
+  isPlaying: boolean;
 }
 
-export const SongInfo = memo(function SongInfo({ params, bpm, currentKey, isVisible }: SongInfoProps) {
-  if (!params) {
+export const SongInfo = memo(function SongInfo({
+  focusSessionStart,
+  isVisible,
+  isPlaying,
+}: SongInfoProps) {
+  const [focusMinutes, setFocusMinutes] = useState(0);
+
+  useEffect(() => {
+    if (!focusSessionStart || !isPlaying) {
+      setFocusMinutes(0);
+      return;
+    }
+
+    const updateFocusTime = () => {
+      const elapsed = Date.now() - focusSessionStart;
+      setFocusMinutes(Math.floor(elapsed / 60000));
+    };
+
+    updateFocusTime();
+    const interval = setInterval(updateFocusTime, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, [focusSessionStart, isPlaying]);
+
+  // Don't show anything if not playing or no session
+  if (!isPlaying || !focusSessionStart) {
     return (
       <AnimatePresence>
         {isVisible && (
@@ -20,20 +41,9 @@ export const SongInfo = memo(function SongInfo({ params, bpm, currentKey, isVisi
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
-            className="text-center space-y-2 md:space-y-3"
+            className="text-center h-8"
           >
-            <div className="font-mono text-sm md:text-base flex items-center justify-center gap-2">
-              <span className="inline-block w-16 h-4 bg-white/10 rounded animate-pulse" />
-              <span className="text-text-muted">·</span>
-              <span className="inline-block w-20 h-4 bg-white/10 rounded animate-pulse" />
-            </div>
-            <div className="text-xs md:text-sm flex items-center justify-center gap-3 md:gap-4">
-              <span className="inline-block w-20 h-3 bg-white/5 rounded animate-pulse" />
-              <span className="text-text-muted">·</span>
-              <span className="inline-block w-14 h-3 bg-white/5 rounded animate-pulse" />
-              <span className="text-text-muted">·</span>
-              <span className="inline-block w-14 h-3 bg-white/5 rounded animate-pulse" />
-            </div>
+            {/* Empty placeholder to maintain layout */}
           </motion.div>
         )}
       </AnimatePresence>
@@ -44,22 +54,15 @@ export const SongInfo = memo(function SongInfo({ params, bpm, currentKey, isVisi
     <AnimatePresence mode="wait">
       {isVisible && (
         <motion.div
-          key={`${bpm}-${currentKey}-${params.mode}`}
+          key="focus-time"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.2 }}
-          className="text-center space-y-2 md:space-y-3"
+          className="text-center"
         >
-          <div className="text-text font-mono text-sm md:text-base">
-            {Math.round(bpm)} BPM · {currentKey} {params.mode}
-          </div>
-          <div className="text-text-muted text-xs md:text-sm flex items-center justify-center gap-3 md:gap-4">
-            <span className="capitalize">{params.energy} energy</span>
-            <span>·</span>
-            <span className="capitalize">{params.valence}</span>
-            <span>·</span>
-            <span className="capitalize">{params.danceability}</span>
+          <div className="text-text text-sm md:text-base">
+            Focused: {focusMinutes} min
           </div>
         </motion.div>
       )}

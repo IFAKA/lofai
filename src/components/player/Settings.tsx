@@ -1,11 +1,18 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { usePreferenceStore } from '@/stores/preferenceStore';
-import { useSettingsStore } from '@/stores/settingsStore';
+import { useSettingsStore, type NoiseType } from '@/stores/settingsStore';
 import { useAudioStore } from '@/stores/audioStore';
 import { useIsMobile } from '@/lib/hooks/useIsMobile';
-import { Modal, Switch, Slider } from '../ui';
+import {
+  Switch,
+  Slider,
+  Drawer,
+  DrawerContent,
+  DrawerTitle,
+} from '../ui';
 import {
   StatsSection,
   LearningProgress,
@@ -17,6 +24,21 @@ interface SettingsProps {
   onClose: () => void;
 }
 
+const SETTINGS_HISTORY_STATE = 'settings-open';
+
+const FOCUS_TIMER_OPTIONS = [
+  { label: 'Off', value: null },
+  { label: '25 min', value: 25 },
+  { label: '50 min', value: 50 },
+] as const;
+
+const NOISE_TYPE_OPTIONS: { label: string; value: NoiseType }[] = [
+  { label: 'Off', value: 'off' },
+  { label: 'White', value: 'white' },
+  { label: 'Pink', value: 'pink' },
+  { label: 'Brown', value: 'brown' },
+];
+
 const SLEEP_TIMER_OPTIONS = [
   { label: 'Off', value: null },
   { label: '15 min', value: 15 },
@@ -27,11 +49,11 @@ const SLEEP_TIMER_OPTIONS = [
 
 function isTimerOptionActive(
   optionValue: number | null,
-  sleepTimerMinutes: number | null,
-  sleepTimerEndTime: number | null
+  timerMinutes: number | null,
+  timerEndTime: number | null
 ): boolean {
-  if (optionValue === null) return sleepTimerEndTime === null;
-  return sleepTimerMinutes === optionValue && sleepTimerEndTime !== null;
+  if (optionValue === null) return timerEndTime === null;
+  return timerMinutes === optionValue && timerEndTime !== null;
 }
 
 function getExplorationLabel(value: number): string {
@@ -49,6 +71,9 @@ function getExplorationDescription(value: number): string {
 }
 
 export function Settings({ isOpen, onClose }: SettingsProps) {
+  const isClosingFromPopstate = useRef(false);
+  const wasOpen = useRef(false);
+
   const {
     totalSongs,
     likeCount,
@@ -67,30 +92,45 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
     sleepTimerMinutes,
     sleepTimerEndTime,
     backgroundEnabled,
+    noiseType,
+    noiseVolume,
+    focusTimerMinutes,
+    focusTimerEndTime,
+    showAdvancedSettings,
     setBpmRange,
     setExplorationLevel,
     setSleepTimer,
     clearSleepTimer,
     setBackgroundEnabled,
+    setNoiseType,
+    setNoiseVolume,
+    setFocusTimer,
+    setShowAdvancedSettings,
   } = useSettingsStore();
 
-  const { pause } = useAudioStore();
-  const { isDesktop } = useIsMobile();
+  const { pause, setNoiseType: setAudioNoiseType, setNoiseVolume: setAudioNoiseVolume } = useAudioStore();
+  const { isCompact } = useIsMobile();
 
   const [localBpmMin, setLocalBpmMin] = useState(bpmMin);
   const [localBpmMax, setLocalBpmMax] = useState(bpmMax);
   const [localExploration, setLocalExploration] = useState(explorationLevel);
-  const [timeRemaining, setTimeRemaining] = useState<string | null>(null);
+  const [localNoiseVolume, setLocalNoiseVolume] = useState(noiseVolume);
+  const [sleepTimeRemaining, setSleepTimeRemaining] = useState<string | null>(null);
+  const [focusTimeRemaining, setFocusTimeRemaining] = useState<string | null>(null);
+  const [customFocusInput, setCustomFocusInput] = useState('');
+  const [showCustomFocus, setShowCustomFocus] = useState(false);
 
   useEffect(() => {
     setLocalBpmMin(bpmMin);
     setLocalBpmMax(bpmMax);
     setLocalExploration(explorationLevel);
-  }, [bpmMin, bpmMax, explorationLevel]);
+    setLocalNoiseVolume(noiseVolume);
+  }, [bpmMin, bpmMax, explorationLevel, noiseVolume]);
 
+  // Sleep timer countdown
   useEffect(() => {
     if (!sleepTimerEndTime) {
-      setTimeRemaining(null);
+      setSleepTimeRemaining(null);
       return;
     }
 
@@ -99,12 +139,12 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
       if (remaining <= 0) {
         pause();
         clearSleepTimer();
-        setTimeRemaining(null);
+        setSleepTimeRemaining(null);
         return;
       }
       const minutes = Math.floor(remaining / 60000);
       const seconds = Math.floor((remaining % 60000) / 1000);
-      setTimeRemaining(`${minutes}:${seconds.toString().padStart(2, '0')}`);
+      setSleepTimeRemaining(`${minutes}:${seconds.toString().padStart(2, '0')}`);
     };
 
     updateRemaining();
@@ -112,9 +152,62 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
     return () => clearInterval(interval);
   }, [sleepTimerEndTime, pause, clearSleepTimer]);
 
+  // Focus timer countdown
+  useEffect(() => {
+    if (!focusTimerEndTime) {
+      setFocusTimeRemaining(null);
+      return;
+    }
+
+    const updateRemaining = () => {
+      const remaining = focusTimerEndTime - Date.now();
+      if (remaining <= 0) {
+        setFocusTimeRemaining(null);
+        return;
+      }
+      const minutes = Math.floor(remaining / 60000);
+      const seconds = Math.floor((remaining % 60000) / 1000);
+      setFocusTimeRemaining(`${minutes}:${seconds.toString().padStart(2, '0')}`);
+    };
+
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
+    return () => clearInterval(interval);
+  }, [focusTimerEndTime]);
+
   useEffect(() => {
     if (isOpen) loadStats();
   }, [isOpen, loadStats]);
+
+  // Manage history state for back button support
+  useEffect(() => {
+    if (isOpen && !wasOpen.current) {
+      // Opening: push state
+      window.history.pushState({ modal: SETTINGS_HISTORY_STATE }, '');
+    } else if (!isOpen && wasOpen.current && !isClosingFromPopstate.current) {
+      // Closing (not from popstate): go back
+      if (window.history.state?.modal === SETTINGS_HISTORY_STATE) {
+        window.history.back();
+      }
+    }
+    wasOpen.current = isOpen;
+  }, [isOpen]);
+
+  // Handle browser back button
+  useEffect(() => {
+    const handlePopstate = () => {
+      if (isOpen) {
+        isClosingFromPopstate.current = true;
+        onClose();
+        setTimeout(() => {
+          isClosingFromPopstate.current = false;
+        }, 0);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopstate);
+    return () => window.removeEventListener('popstate', handlePopstate);
+  }, [isOpen, onClose]);
 
   const handleBpmMinCommit = useCallback(() => {
     const min = Math.min(localBpmMin, localBpmMax);
@@ -132,158 +225,311 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
     setExplorationLevel(localExploration);
   }, [localExploration, setExplorationLevel]);
 
+  const handleNoiseVolumeCommit = useCallback(() => {
+    setNoiseVolume(localNoiseVolume);
+    setAudioNoiseVolume(localNoiseVolume);
+  }, [localNoiseVolume, setNoiseVolume, setAudioNoiseVolume]);
+
+  const handleNoiseTypeChange = (type: NoiseType) => {
+    setNoiseType(type);
+    setAudioNoiseType(type);
+  };
+
+  const handleCustomFocusSubmit = () => {
+    const minutes = parseInt(customFocusInput, 10);
+    if (!isNaN(minutes) && minutes > 0 && minutes <= 180) {
+      setFocusTimer(minutes);
+      setShowCustomFocus(false);
+      setCustomFocusInput('');
+    }
+  };
+
   const handleReset = async () => {
     if (confirm('Reset all learned preferences? This cannot be undone.')) {
       await resetPreferences();
     }
   };
 
-  if (!isOpen) return null;
+  const settingsContent = (
+    <div className="space-y-8">
+      <h2 className="text-text-bright text-lg font-medium">Settings</h2>
 
-  return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      variant={isDesktop ? 'modal' : 'sheet'}
-      maxWidth="max-w-md"
-      maxHeight="80vh"
-    >
-      <div className="space-y-8">
-        <h2 className="text-text-bright text-lg font-medium">Settings</h2>
-
-        {/* Sleep Timer */}
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-text text-sm">Sleep Timer</h3>
-            {timeRemaining && (
-              <span className="text-accent text-sm font-mono">{timeRemaining}</span>
-            )}
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            {SLEEP_TIMER_OPTIONS.map((option) => (
+      {/* Focus Timer */}
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="text-text text-sm">Focus Timer</h3>
+          {focusTimeRemaining && (
+            <span className="text-accent text-sm">Remaining: {focusTimeRemaining}</span>
+          )}
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {FOCUS_TIMER_OPTIONS.map((option) => (
+            <button
+              key={option.label}
+              onClick={() => {
+                setFocusTimer(option.value);
+                setShowCustomFocus(false);
+              }}
+              className={`px-4 py-2 rounded-xl text-sm transition-colors ${
+                isTimerOptionActive(option.value, focusTimerMinutes, focusTimerEndTime)
+                  ? 'glass-light text-text-bright'
+                  : 'text-text-muted hover:text-text'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+          <button
+            onClick={() => setShowCustomFocus(!showCustomFocus)}
+            className={`px-4 py-2 rounded-xl text-sm transition-colors ${
+              showCustomFocus ? 'glass-light text-text-bright' : 'text-text-muted hover:text-text'
+            }`}
+          >
+            Custom
+          </button>
+        </div>
+        <AnimatePresence>
+          {showCustomFocus && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="flex gap-2 items-center overflow-hidden"
+            >
+              <input
+                type="number"
+                value={customFocusInput}
+                onChange={(e) => setCustomFocusInput(e.target.value)}
+                placeholder="Minutes (1-180)"
+                min={1}
+                max={180}
+                className="flex-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-text text-sm focus:outline-none focus:border-accent/50"
+              />
               <button
-                key={option.label}
-                onClick={() => setSleepTimer(option.value)}
-                className={`px-4 py-2 rounded-xl text-sm transition-colors ${
-                  isTimerOptionActive(option.value, sleepTimerMinutes, sleepTimerEndTime)
-                    ? 'glass-light text-text-bright'
-                    : 'text-text-muted hover:text-text'
-                }`}
+                onClick={handleCustomFocusSubmit}
+                className="px-4 py-2 rounded-xl bg-accent/20 text-accent text-sm hover:bg-accent/30 transition-colors"
               >
-                {option.label}
+                Set
               </button>
-            ))}
-          </div>
-        </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
-        {/* BPM Range */}
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-text text-sm">BPM Range</h3>
-            <span className="text-text-muted text-xs font-mono">
-              {localBpmMin} - {localBpmMax} BPM
-            </span>
-          </div>
-          <div className="glass-light rounded-xl p-5 space-y-4">
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs text-text-muted">
-                <span>Min</span>
-                <span>{localBpmMin} BPM</span>
-              </div>
-              <Slider
-                value={[localBpmMin]}
-                onValueChange={([v]) => setLocalBpmMin(v)}
-                onValueCommit={handleBpmMinCommit}
-                min={60}
-                max={100}
-                step={5}
-              />
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs text-text-muted">
-                <span>Max</span>
-                <span>{localBpmMax} BPM</span>
-              </div>
-              <Slider
-                value={[localBpmMax]}
-                onValueChange={([v]) => setLocalBpmMax(v)}
-                onValueCommit={handleBpmMaxCommit}
-                min={60}
-                max={100}
-                step={5}
-              />
-            </div>
-            <p className="text-text-muted text-xs">
-              Restricts generated songs to this tempo range
-            </p>
-          </div>
+      {/* Background Noise */}
+      <div className="space-y-4">
+        <h3 className="text-text text-sm">Background Noise</h3>
+        <div className="flex gap-2 flex-wrap">
+          {NOISE_TYPE_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => handleNoiseTypeChange(option.value)}
+              className={`px-4 py-2 rounded-xl text-sm transition-colors ${
+                noiseType === option.value
+                  ? 'glass-light text-text-bright'
+                  : 'text-text-muted hover:text-text'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
-
-        {/* Discovery Mode */}
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-text text-sm">Discovery Mode</h3>
-            <span className="text-text-muted text-xs">
-              {getExplorationLabel(localExploration)}
-            </span>
-          </div>
-          <div className="glass-light rounded-xl p-5 space-y-3">
+        {noiseType !== 'off' && (
+          <motion.div
+            initial={false}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="glass-light rounded-xl p-4 space-y-2"
+          >
             <div className="flex justify-between text-xs text-text-muted">
-              <span>Familiar</span>
-              <span>Discover</span>
+              <span>Volume</span>
+              <span>{Math.round(localNoiseVolume * 100)}%</span>
             </div>
             <Slider
-              value={[localExploration]}
-              onValueChange={([v]) => setLocalExploration(v)}
-              onValueCommit={handleExplorationCommit}
+              value={[localNoiseVolume]}
+              onValueChange={([v]) => setLocalNoiseVolume(v)}
+              onValueCommit={handleNoiseVolumeCommit}
               min={0}
               max={1}
               step={0.05}
             />
-            <p className="text-text-muted text-xs">
-              {getExplorationDescription(localExploration)}
-            </p>
-          </div>
-        </div>
-
-        {/* Background Animation - Desktop only */}
-        {isDesktop && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center gap-4">
-              <div>
-                <h3 className="text-text text-sm">Background Animation</h3>
-                <p className="text-text-muted text-xs mt-1">Disable for better performance</p>
-              </div>
-              <Switch
-                checked={backgroundEnabled}
-                onCheckedChange={setBackgroundEnabled}
-                aria-label="Background animation"
-              />
-            </div>
-          </div>
+          </motion.div>
         )}
+      </div>
 
-        <StatsSection totalSongs={totalSongs} likeCount={likeCount} skipCount={skipCount} />
-        <LearningProgress exploitationRatio={exploitationRatio} totalSongs={totalSongs} />
-        <LearnedPreferences bestParams={bestParams} />
-
-        {/* Reset Button */}
-        <button
-          onClick={handleReset}
-          disabled={isLoading}
-          className="w-full py-3 rounded-xl border border-error/30 text-error text-sm hover:bg-error/10 transition-colors disabled:opacity-50"
-        >
-          Reset Learned Preferences
-        </button>
-
-        {/* About */}
-        <div className="text-center space-y-2 pt-6">
-          <p className="text-text-muted text-xs">LofAI v1.0.0</p>
-          <p className="text-text-muted text-xs">
-            AI-generated lofi music that learns your taste
-          </p>
+      {/* Sleep Timer */}
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="text-text text-sm">Sleep Timer</h3>
+          {sleepTimeRemaining && (
+            <span className="text-accent text-sm">{sleepTimeRemaining}</span>
+          )}
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {SLEEP_TIMER_OPTIONS.map((option) => (
+            <button
+              key={option.label}
+              onClick={() => setSleepTimer(option.value)}
+              className={`px-4 py-2 rounded-xl text-sm transition-colors ${
+                isTimerOptionActive(option.value, sleepTimerMinutes, sleepTimerEndTime)
+                  ? 'glass-light text-text-bright'
+                  : 'text-text-muted hover:text-text'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
       </div>
-    </Modal>
+
+      {/* Background Animation - Wide screens only */}
+      {!isCompact && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center gap-4">
+            <div>
+              <h3 className="text-text text-sm">Background Animation</h3>
+              <p className="text-text-muted text-xs mt-1">Can be distracting for focus work</p>
+            </div>
+            <Switch
+              checked={backgroundEnabled}
+              onCheckedChange={setBackgroundEnabled}
+              aria-label="Background animation"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Advanced Settings (Collapsible) */}
+      <div className="space-y-4">
+        <button
+          onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+          className="flex items-center gap-2 text-text-muted hover:text-text transition-colors"
+        >
+          <svg
+            className={`w-4 h-4 transition-transform ${showAdvancedSettings ? 'rotate-90' : ''}`}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+          <span className="text-sm">Advanced Settings</span>
+        </button>
+
+        <AnimatePresence>
+          {showAdvancedSettings && (
+            <motion.div
+              initial={false}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="space-y-6 overflow-hidden"
+            >
+              {/* BPM Range */}
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-text text-sm">BPM Range</h3>
+                  <span className="text-text-muted text-xs">
+                    {localBpmMin} - {localBpmMax} BPM
+                  </span>
+                </div>
+                <div className="glass-light rounded-xl p-5 space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-text-muted">
+                      <span>Min</span>
+                      <span>{localBpmMin} BPM</span>
+                    </div>
+                    <Slider
+                      value={[localBpmMin]}
+                      onValueChange={([v]) => setLocalBpmMin(v)}
+                      onValueCommit={handleBpmMinCommit}
+                      min={60}
+                      max={100}
+                      step={5}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-text-muted">
+                      <span>Max</span>
+                      <span>{localBpmMax} BPM</span>
+                    </div>
+                    <Slider
+                      value={[localBpmMax]}
+                      onValueChange={([v]) => setLocalBpmMax(v)}
+                      onValueCommit={handleBpmMaxCommit}
+                      min={60}
+                      max={100}
+                      step={5}
+                    />
+                  </div>
+                  <p className="text-text-muted text-xs">
+                    Restricts generated songs to this tempo range
+                  </p>
+                </div>
+              </div>
+
+              {/* Discovery Mode */}
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-text text-sm">Discovery Mode</h3>
+                  <span className="text-text-muted text-xs">
+                    {getExplorationLabel(localExploration)}
+                  </span>
+                </div>
+                <div className="glass-light rounded-xl p-5 space-y-3">
+                  <div className="flex justify-between text-xs text-text-muted">
+                    <span>Familiar</span>
+                    <span>Discover</span>
+                  </div>
+                  <Slider
+                    value={[localExploration]}
+                    onValueChange={([v]) => setLocalExploration(v)}
+                    onValueCommit={handleExplorationCommit}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                  />
+                  <p className="text-text-muted text-xs">
+                    {getExplorationDescription(localExploration)}
+                  </p>
+                </div>
+              </div>
+
+              <StatsSection totalSongs={totalSongs} likeCount={likeCount} skipCount={skipCount} />
+              <LearningProgress exploitationRatio={exploitationRatio} totalSongs={totalSongs} />
+              <LearnedPreferences bestParams={bestParams} />
+
+              {/* Reset Button */}
+              <button
+                onClick={handleReset}
+                disabled={isLoading}
+                className="w-full py-3 rounded-xl border border-error/30 text-error text-sm hover:bg-error/10 transition-colors disabled:opacity-50"
+              >
+                Reset Learned Preferences
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* About */}
+      <div className="text-center space-y-2 pt-6">
+        <p className="text-text-muted text-xs">LofAI v1.0.0</p>
+        <p className="text-text-muted text-xs">
+          Focus music for ADHD brains
+        </p>
+      </div>
+    </div>
+  );
+
+  return (
+    <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DrawerContent className="safe-area-bottom">
+        <DrawerTitle className="sr-only">Settings</DrawerTitle>
+        <div className="overflow-y-auto overscroll-contain px-6 pb-10 max-h-[80vh]">
+          {settingsContent}
+        </div>
+      </DrawerContent>
+    </Drawer>
   );
 }

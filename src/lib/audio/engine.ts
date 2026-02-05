@@ -1,114 +1,71 @@
-import * as Tone from 'tone';
-import { createLofiChain, type LofiChain } from './effects/lofiChain';
-import { sampleMixer } from './sampleLibrary/mixer';
-import { lofiPack } from './sampleLibrary/manifest';
-import type { EnergyLevel, Mood } from './sampleLibrary/types';
-import { mediaSession, generateSongTitle, generateSongSubtitle } from './mediaSession';
-import {
-  GenerationParams,
-  TEMPO_RANGES,
-} from '@/lib/preferences/types';
+/**
+ * Main Audio Engine - Uses generative lofi engine from lofi-engine
+ * Integrates with the learning system (Thompson sampling bandit) to
+ * apply user preferences to music generation.
+ */
+
+import { generativeEngine, type NoiseType } from './generative';
+import { mediaSession } from './mediaSession';
 import { selectGenerationParams } from '@/lib/preferences/bandit';
 import {
   startSongTracking,
   endSongPlayback,
   updateListenDuration,
-  checkSessionBonus,
+  isTrackingSong,
 } from '@/lib/preferences/feedback';
+
+export type { NoiseType };
 
 export interface EngineState {
   isInitialized: boolean;
   isPlaying: boolean;
   bpm: number;
   currentKey: string;
-  currentParams: GenerationParams | null;
   songId: string | null;
-  playStartTime: number | null;
   samplesLoaded: boolean;
   samplesLoading: boolean;
-  activeLayers: string[];
-}
-
-// Map generation params to sample mixer parameters
-function mapParamsToMixer(params: GenerationParams): {
-  energy: EnergyLevel;
-  mood: Mood;
-} {
-  // Map energy level
-  const energyMap: Record<string, EnergyLevel> = {
-    low: 'low',
-    medium: 'medium',
-    high: 'high',
-  };
-  const energy = energyMap[params.energy] || 'low';
-
-  // Map valence/danceability to mood
-  // ValenceArm = 'sad' | 'neutral' | 'happy'
-  let mood: Mood = 'chill';
-  if (params.valence === 'sad') {
-    mood = 'melancholic';
-  } else if (params.valence === 'happy') {
-    mood = 'uplifting';
-  } else if (params.danceability === 'chill') {
-    mood = params.energy === 'low' ? 'dreamy' : 'chill';
-  }
-
-  return { energy, mood };
-}
-
-// Select a random key from available keys in the sample pack
-function selectRandomKey(): string {
-  const keys = ['Cm', 'Am', 'Fm', 'C', 'Dm'];
-  return keys[Math.floor(Math.random() * keys.length)];
+  progressIndex: number;
+  progression: string[];
 }
 
 class AudioEngine {
   private state: EngineState = {
     isInitialized: false,
     isPlaying: false,
-    bpm: 80,
-    currentKey: 'Cm',
-    currentParams: null,
+    bpm: 78, // Effective BPM (156 with swing)
+    currentKey: 'C',
     songId: null,
-    playStartTime: null,
     samplesLoaded: false,
     samplesLoading: false,
-    activeLayers: [],
+    progressIndex: 0,
+    progression: [],
   };
-
-  private lofiChain: LofiChain | null = null;
-  private masterGain: Tone.Gain | null = null;
-
-  private audioElement: HTMLAudioElement | null = null;
-  private mediaStreamDestination: MediaStreamAudioDestinationNode | null = null;
-
-  private samplesLoadPromise: Promise<void> | null = null;
 
   private stateListeners: Set<(state: EngineState) => void> = new Set();
 
+  // Listen duration tracking for feedback system
   private durationInterval: ReturnType<typeof setInterval> | null = null;
-  private sessionBonusCheckCounter = 0;
+  private listenStartTime: number = 0;
 
   async initialize(): Promise<void> {
     if (this.state.isInitialized) return;
 
-    await Tone.start();
+    this.state.samplesLoading = true;
+    this.notifyListeners();
 
-    this.masterGain = new Tone.Gain(0);
+    await generativeEngine.initialize();
 
-    this.lofiChain = createLofiChain();
-
-    // Connect sample mixer output to lofi effects chain
-    sampleMixer.getOutput().connect(this.lofiChain.input);
-
-    this.lofiChain.output.connect(this.masterGain);
-
-    this.setupBackgroundPlayback();
-
-    this.masterGain.connect(Tone.getDestination());
-
-    Tone.getTransport().swing = 0.5;
-    Tone.getTransport().swingSubdivision = '16n';
+    // Subscribe to generative engine state
+    generativeEngine.subscribe((genState) => {
+      this.state.isPlaying = genState.isPlaying;
+      this.state.currentKey = genState.key;
+      this.state.bpm = 78; // Effective BPM
+      this.state.progressIndex = genState.progressIndex;
+      this.state.progression = genState.progression.map(c => c.degree);
+      this.state.samplesLoaded = genState.isLoaded;
+      this.state.samplesLoading = !genState.isLoaded;
+      this.notifyListeners();
+    });
 
     mediaSession.setup({
       onPlay: () => this.play(),
@@ -116,124 +73,48 @@ class AudioEngine {
       onNextTrack: () => this.generateNewSong(),
     });
 
-    // Start loading samples
-    this.loadSamples();
-
     this.state.isInitialized = true;
+    this.state.samplesLoaded = true;
+    this.state.samplesLoading = false;
     this.notifyListeners();
   }
 
-  private async loadSamples(): Promise<void> {
-    if (this.samplesLoadPromise) return this.samplesLoadPromise;
-
-    this.state.samplesLoading = true;
-    this.notifyListeners();
-
-    this.samplesLoadPromise = (async () => {
+  async generateNewSong(): Promise<void> {
+    // End tracking for previous song (marked as skipped)
+    if (isTrackingSong()) {
       try {
-        await sampleMixer.loadPack(lofiPack);
-        this.state.samplesLoaded = true;
-        this.state.samplesLoading = false;
-        console.log('Sample pack loaded successfully');
-        this.notifyListeners();
-      } catch (error) {
-        console.error('Failed to load sample pack:', error);
-        this.state.samplesLoading = false;
-        this.notifyListeners();
-        throw error;
+        await endSongPlayback(true);
+      } catch (err) {
+        // Ignore errors from ending previous song
+        console.debug('Error ending previous song tracking:', err);
       }
-    })();
-
-    return this.samplesLoadPromise;
-  }
-
-  private setupBackgroundPlayback(): void {
-    if (typeof window === 'undefined') {
-      throw new Error('Background playback requires browser environment');
     }
+    this.stopDurationTracking();
 
-    const ctx = Tone.getContext().rawContext as AudioContext;
-    this.mediaStreamDestination = ctx.createMediaStreamDestination();
+    // Select generation parameters using the bandit
+    const params = await selectGenerationParams();
 
-    if (!this.masterGain) {
-      throw new Error('Master gain not initialized');
-    }
-    this.masterGain.connect(this.mediaStreamDestination);
+    // Apply learned parameters to generative engine
+    generativeEngine.applyGenerationParams(params);
 
-    this.audioElement = document.createElement('audio');
-    this.audioElement.srcObject = this.mediaStreamDestination.stream;
-    this.audioElement.autoplay = true;
+    // Trigger new progression/song
+    generativeEngine.skip();
 
-    document.body.appendChild(this.audioElement);
-    this.audioElement.style.display = 'none';
-  }
+    // Start tracking the new song
+    // Estimated duration ~180 seconds (3 minutes) for a typical lo-fi section
+    const songId = await startSongTracking(params, 180);
+    this.state.songId = songId;
 
-  async generateNewSong(useDefaults = false): Promise<void> {
-    const wasPlaying = this.state.isPlaying;
+    // Start duration tracking
+    this.startDurationTracking();
 
-    if (this.state.songId) {
-      await endSongPlayback(true);
-    }
-
-    // Select generation params
-    let params: GenerationParams;
-    if (useDefaults) {
-      params = {
-        tempo: 'focus',
-        energy: 'low',
-        valence: 'neutral',
-        danceability: 'chill',
-        mode: 'minor',
-      };
-    } else {
-      params = await selectGenerationParams();
-    }
-    this.state.currentParams = params;
-
-    // Select key for sample selection
-    this.state.currentKey = selectRandomKey();
-
-    // Set BPM from tempo range
-    const tempoRange = TEMPO_RANGES[params.tempo];
-    this.state.bpm = Math.round(tempoRange.min + Math.random() * (tempoRange.max - tempoRange.min));
-
-    // Map params to mixer parameters
-    const { energy, mood } = mapParamsToMixer(params);
-
-    // Configure the sample mixer
-    sampleMixer.setParameters({
-      energy,
-      mood,
-      key: this.state.currentKey,
-      bpm: this.state.bpm,
-    });
-
-    // If already playing, trigger a transition to new samples
-    if (wasPlaying) {
-      await sampleMixer.transition();
-    }
-
-    // Update metadata
-    const title = generateSongTitle(params);
-    const subtitle = generateSongSubtitle({
-      ...params,
-      key: this.state.currentKey,
-    });
+    const genState = generativeEngine.getState();
 
     mediaSession.updateMetadata({
-      title,
-      artist: subtitle,
+      title: `Lofi in ${genState.key}`,
+      artist: 'LofAI Generative',
       album: 'LofAI',
     });
-
-    // Track song for feedback system
-    const estimatedDuration = 120;
-    this.state.songId = await startSongTracking(params, estimatedDuration);
-    this.state.playStartTime = Date.now();
-
-    // Update active layers in state
-    const mixerState = sampleMixer.getState();
-    this.state.activeLayers = mixerState.activeLayers;
 
     this.notifyListeners();
   }
@@ -243,134 +124,85 @@ class AudioEngine {
       await this.initialize();
     }
 
-    // Wait for samples to load
-    if (this.samplesLoadPromise) {
-      await this.samplesLoadPromise;
+    // If not tracking a song yet, generate one with bandit params
+    if (!isTrackingSong()) {
+      const params = await selectGenerationParams();
+      generativeEngine.applyGenerationParams(params);
+      const songId = await startSongTracking(params, 180);
+      this.state.songId = songId;
     }
 
-    // Generate song params if none set
-    if (!this.state.currentParams) {
-      await this.generateNewSong(true);
-    }
+    await generativeEngine.play();
 
-    // Fade in master gain
-    if (this.masterGain) {
-      this.masterGain.gain.cancelScheduledValues(Tone.now());
-      this.masterGain.gain.setValueAtTime(0, Tone.now());
-      this.masterGain.gain.linearRampToValueAtTime(1, Tone.now() + 0.3);
-    }
-
-    // Start the sample mixer
-    await sampleMixer.start();
-
-    // Start transport
-    Tone.getTransport().start();
-
-    // Start audio element for background playback
-    if (!this.audioElement) {
-      throw new Error('Audio element not initialized');
-    }
-    await this.audioElement.play();
-
+    // Start duration tracking
     this.startDurationTracking();
 
-    this.state.isPlaying = true;
-    this.state.playStartTime = Date.now();
+    const genState = generativeEngine.getState();
 
-    // Update active layers
-    const mixerState = sampleMixer.getState();
-    this.state.activeLayers = mixerState.activeLayers;
+    mediaSession.updateMetadata({
+      title: `Lofi in ${genState.key}`,
+      artist: 'LofAI Generative',
+      album: 'LofAI',
+    });
 
     mediaSession.setPlaybackState('playing');
-    this.notifyListeners();
   }
 
   pause(): void {
-    if (this.masterGain) {
-      this.masterGain.gain.cancelScheduledValues(Tone.now());
-      this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, Tone.now());
-      this.masterGain.gain.linearRampToValueAtTime(0, Tone.now() + 0.2);
-    }
-
-    setTimeout(() => {
-      Tone.getTransport().pause();
-
-      if (this.audioElement) {
-        this.audioElement.pause();
-      }
-    }, 250);
-
+    generativeEngine.pause();
     this.stopDurationTracking();
-
-    this.state.isPlaying = false;
-
     mediaSession.setPlaybackState('paused');
-    this.notifyListeners();
   }
 
   async stop(): Promise<void> {
-    if (this.masterGain) {
-      this.masterGain.gain.cancelScheduledValues(Tone.now());
-      this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, Tone.now());
-      this.masterGain.gain.linearRampToValueAtTime(0, Tone.now() + 0.2);
+    // End tracking for current song (not skipped, just stopped)
+    if (isTrackingSong()) {
+      try {
+        await endSongPlayback(false);
+      } catch (err) {
+        console.debug('Error ending song tracking on stop:', err);
+      }
     }
-
-    await new Promise((resolve) => setTimeout(resolve, 250));
-
-    // Stop the sample mixer
-    sampleMixer.stop();
-
-    Tone.getTransport().stop();
-
-    if (this.audioElement) {
-      this.audioElement.pause();
-    }
-
-    if (this.state.songId) {
-      await endSongPlayback(false);
-      this.state.songId = null;
-    }
-
     this.stopDurationTracking();
+    this.state.songId = null;
 
-    this.state.isPlaying = false;
-    this.state.currentParams = null;
-    this.state.activeLayers = [];
-
+    generativeEngine.stop();
     mediaSession.setPlaybackState('none');
-    this.notifyListeners();
   }
 
+  setVolume(volume: number): void {
+    generativeEngine.setVolume(volume);
+  }
+
+  setNoiseType(type: NoiseType): void {
+    generativeEngine.setNoiseType(type);
+  }
+
+  setNoiseVolume(volume: number): void {
+    generativeEngine.setNoiseVolume(volume);
+  }
+
+  /**
+   * Start tracking listen duration for the feedback system
+   * Updates every second while playing
+   */
   private startDurationTracking(): void {
-    this.stopDurationTracking();
-    this.sessionBonusCheckCounter = 0;
-
-    this.durationInterval = setInterval(async () => {
-      if (this.state.playStartTime) {
-        const duration = (Date.now() - this.state.playStartTime) / 1000;
+    this.listenStartTime = Date.now();
+    this.durationInterval = setInterval(() => {
+      if (this.state.isPlaying) {
+        const duration = (Date.now() - this.listenStartTime) / 1000;
         updateListenDuration(duration);
-
-        this.sessionBonusCheckCounter++;
-        if (this.sessionBonusCheckCounter >= 60) {
-          this.sessionBonusCheckCounter = 0;
-          await checkSessionBonus();
-        }
       }
     }, 1000);
   }
 
+  /**
+   * Stop tracking listen duration
+   */
   private stopDurationTracking(): void {
     if (this.durationInterval) {
       clearInterval(this.durationInterval);
       this.durationInterval = null;
-    }
-  }
-
-  setVolume(volume: number): void {
-    const curved = volume * volume;
-
-    if (this.masterGain) {
-      this.masterGain.gain.value = curved;
     }
   }
 
@@ -389,18 +221,9 @@ class AudioEngine {
   }
 
   dispose(): void {
-    this.stop();
-
-    sampleMixer.dispose();
-    this.lofiChain?.dispose();
-    this.masterGain?.dispose();
-
-    if (this.audioElement) {
-      this.audioElement.remove();
-    }
-
+    this.stopDurationTracking();
+    generativeEngine.dispose();
     mediaSession.cleanup();
-
     this.state.isInitialized = false;
   }
 }
