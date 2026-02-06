@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAudioAnalyzer } from '@/lib/audio/useAudioAnalyzer';
-import { usePerformanceTier, useIsMobile, type DeviceType } from '@/lib/hooks/useIsMobile';
+import { usePerformanceTier, useIsMobile } from '@/lib/hooks/useIsMobile';
 import { useEffect, useState, useRef, useCallback, memo } from 'react';
 
 // ============ Lightweight Gradient Visualizer ============
@@ -12,7 +12,6 @@ import { useEffect, useState, useRef, useCallback, memo } from 'react';
 interface GradientVisualizerProps {
   isPlaying: boolean;
   bpm: number;
-  deviceType: DeviceType;
   screenWidth: number;
   screenHeight: number;
 }
@@ -20,7 +19,6 @@ interface GradientVisualizerProps {
 const GradientVisualizer = memo(function GradientVisualizer({
   isPlaying,
   bpm,
-  deviceType,
   screenWidth,
   screenHeight,
 }: GradientVisualizerProps) {
@@ -60,36 +58,33 @@ const GradientVisualizer = memo(function GradientVisualizer({
   // Adjust animation speed based on BPM
   const animDuration = Math.max(8, 20 - (bpm - 60) * 0.1);
 
-  // Adapt orb sizes and positions based on device type and screen dimensions
   const isLandscape = screenWidth > screenHeight;
-  const isPhone = deviceType === 'phone';
-  const isTablet = deviceType === 'tablet';
+  const isPhone = screenWidth < 480;
 
   // Orb configuration based on device
   const orbConfig = {
     orb1: {
-      width: isPhone ? '70%' : isTablet ? '55%' : '50%',
-      height: isPhone ? (isLandscape ? '50%' : '35%') : isTablet ? '40%' : '35%',
+      width: isPhone ? '70%' : '55%',
+      height: isPhone ? (isLandscape ? '50%' : '35%') : '40%',
       left: isPhone ? '15%' : '25%',
       bottom: isPhone ? '5%' : '10%',
     },
     orb2: {
-      width: isPhone ? '55%' : isTablet ? '45%' : '40%',
-      height: isPhone ? (isLandscape ? '40%' : '30%') : isTablet ? '35%' : '30%',
+      width: isPhone ? '55%' : '45%',
+      height: isPhone ? (isLandscape ? '40%' : '30%') : '35%',
       left: isPhone ? '30%' : '35%',
       bottom: isPhone ? '15%' : '20%',
     },
     orb3: {
-      width: isPhone ? '45%' : isTablet ? '35%' : '30%',
-      height: isPhone ? (isLandscape ? '30%' : '22%') : isTablet ? '25%' : '22%',
+      width: isPhone ? '45%' : '35%',
+      height: isPhone ? (isLandscape ? '30%' : '22%') : '25%',
       left: isPhone ? '10%' : '20%',
       bottom: isPhone ? '25%' : '30%',
     },
-    // Add extra orbs for larger screens
     showOrb4: !isPhone,
     orb4: {
-      width: isTablet ? '30%' : '25%',
-      height: isTablet ? '22%' : '18%',
+      width: '30%',
+      height: '22%',
       left: '55%',
       bottom: '35%',
     },
@@ -267,39 +262,38 @@ const initBlobs = (tier: keyof typeof TIER_CONFIG): Blob[] => {
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 
 export const LavaLamp = memo(function LavaLamp({ isPlaying, bpm }: { isPlaying: boolean; bpm: number }) {
-  const { deviceType, screenWidth, screenHeight } = useIsMobile();
+  const { screenWidth, screenHeight } = useIsMobile();
   const tier = usePerformanceTier();
 
-  // Use lightweight visualizer for phones and tablets (screen width < 768px)
-  const useGradientVisualizer = deviceType !== 'desktop';
+  const isMobileSize = screenWidth < 768;
 
-  const { bass, mids, overall } = useAudioAnalyzer(isPlaying && !useGradientVisualizer);
+  const { bass, mids, overall } = useAudioAnalyzer(isPlaying && !isMobileSize);
   const config = TIER_CONFIG[tier];
 
   const [hasEverPlayed, setHasEverPlayed] = useState(false);
   const [blobs, setBlobs] = useState<Blob[]>(() => initBlobs(tier));
   const [isTabVisible, setIsTabVisible] = useState(true);
-  const prevGradientMode = useRef(useGradientVisualizer);
+  const prevGradientMode = useRef(isMobileSize);
 
   const audioRef = useRef({ bass: 0, mids: 0, overall: 0, bpm: 80 });
   audioRef.current = { bass, mids, overall, bpm };
 
   // Re-init blobs when tier changes (only matters for blob visualizer)
   useEffect(() => {
-    if (!useGradientVisualizer) {
+    if (!isMobileSize) {
       setBlobs(initBlobs(tier));
     }
-  }, [tier, useGradientVisualizer]);
+  }, [tier, isMobileSize]);
 
   // Re-init blobs when switching from gradient to blob visualizer
   useEffect(() => {
-    const switchedToBlobs = prevGradientMode.current && !useGradientVisualizer;
-    prevGradientMode.current = useGradientVisualizer;
+    const switchedToBlobs = prevGradientMode.current && !isMobileSize;
+    prevGradientMode.current = isMobileSize;
 
     if (switchedToBlobs) {
       setBlobs(initBlobs(tier));
     }
-  }, [useGradientVisualizer, tier]);
+  }, [isMobileSize, tier]);
 
   useEffect(() => { if (isPlaying) setHasEverPlayed(true); }, [isPlaying]);
 
@@ -411,12 +405,11 @@ export const LavaLamp = memo(function LavaLamp({ isPlaying, bpm }: { isPlaying: 
   }, [isPlaying, tick, config.interval, isTabVisible]);
 
   // Use lightweight CSS gradient visualizer for phones, tablets, and small screens
-  if (useGradientVisualizer) {
+  if (isMobileSize) {
     return (
       <GradientVisualizer
         isPlaying={isPlaying}
         bpm={bpm}
-        deviceType={deviceType}
         screenWidth={screenWidth}
         screenHeight={screenHeight}
       />
