@@ -12,6 +12,7 @@ export function BarChart({ data, height = 120, barColor = 'rgba(168, 85, 247, 0.
   const maxValue = Math.max(...data.map(d => d.value), 1);
   const barWidth = Math.max(8, Math.min(32, (280 / data.length) - 4));
   const svgWidth = data.length * (barWidth + 4) + 20;
+  const labelSkip = data.length > 10 ? 3 : data.length > 6 ? 2 : 1;
 
   return (
     <svg
@@ -37,15 +38,17 @@ export function BarChart({ data, height = 120, barColor = 'rgba(168, 85, 247, 0.
               rx={3}
               fill={barColor}
             />
-            <text
-              x={x + barWidth / 2}
-              y={height - 4}
-              textAnchor="middle"
-              fill="rgba(255,255,255,0.4)"
-              fontSize="8"
-            >
-              {d.label}
-            </text>
+            {i % labelSkip === 0 && (
+              <text
+                x={x + barWidth / 2}
+                y={height - 4}
+                textAnchor="middle"
+                fill="rgba(255,255,255,0.4)"
+                fontSize="8"
+              >
+                {d.label}
+              </text>
+            )}
           </g>
         );
       })}
