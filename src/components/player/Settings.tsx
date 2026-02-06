@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 import { usePreferenceStore } from '@/stores/preferenceStore';
 import { useSettingsStore, type NoiseType } from '@/stores/settingsStore';
 import { useAudioStore } from '@/stores/audioStore';
@@ -10,12 +11,22 @@ import {
   Drawer,
   DrawerContent,
   DrawerTitle,
+  DrawerDescription,
 } from '../ui';
 import {
   StatsSection,
   LearningProgress,
   LearnedPreferences,
 } from './settings/index';
+import {
+  exportAllData,
+  downloadJson,
+  validateImportData,
+  importAllData,
+} from '@/lib/preferences/dataTransfer';
+import { generateTasteProfile, getTasteProfileUrl } from '@/lib/preferences/tasteProfile';
+import { AnalyticsDashboard } from '../analytics/AnalyticsDashboard';
+import type { VisualizerType } from '../visualizer/types';
 
 interface SettingsProps {
   isOpen: boolean;
@@ -35,6 +46,13 @@ const NOISE_TYPE_OPTIONS: { label: string; value: NoiseType }[] = [
   { label: 'White', value: 'white' },
   { label: 'Pink', value: 'pink' },
   { label: 'Brown', value: 'brown' },
+];
+
+const VISUALIZER_OPTIONS: { label: string; value: VisualizerType }[] = [
+  { label: 'Lava Lamp', value: 'lava' },
+  { label: 'Waveform', value: 'waveform' },
+  { label: 'Particles', value: 'particles' },
+  { label: 'Dots', value: 'dots' },
 ];
 
 const SLEEP_TIMER_OPTIONS = [
@@ -102,6 +120,8 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
     setNoiseVolume,
     setFocusTimer,
     setShowAdvancedSettings,
+    visualizerType,
+    setVisualizerType,
   } = useSettingsStore();
 
   const { pause, setNoiseType: setAudioNoiseType, setNoiseVolume: setAudioNoiseVolume } = useAudioStore();
@@ -114,6 +134,7 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
   const [focusTimeRemaining, setFocusTimeRemaining] = useState<string | null>(null);
   const [customFocusInput, setCustomFocusInput] = useState('');
   const [showCustomFocus, setShowCustomFocus] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
   useEffect(() => {
     setLocalBpmMin(bpmMin);
@@ -245,14 +266,62 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
     }
   };
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleShareTaste = async () => {
+    try {
+      const profile = await generateTasteProfile();
+      const url = getTasteProfileUrl(profile);
+      await navigator.clipboard.writeText(url);
+      toast.success(`Copied! Your taste: ${profile.summary}`);
+    } catch {
+      toast.error('Failed to generate taste profile');
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const data = await exportAllData();
+      downloadJson(data);
+      toast.success('Data exported successfully');
+    } catch {
+      toast.error('Failed to export data');
+    }
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        if (!validateImportData(parsed)) {
+          toast.error('Invalid data file');
+          return;
+        }
+        await importAllData(parsed);
+        toast.success('Data imported successfully');
+        loadStats();
+      } catch {
+        toast.error('Failed to import data');
+      }
+    };
+    reader.readAsText(file);
+
+    // Reset input so same file can be re-selected
+    e.target.value = '';
+  };
+
   const settingsContent = (
     <div className="space-y-8">
       <h2 className="text-text-bright text-lg font-medium">Settings</h2>
 
       {/* Focus Timer */}
-      <div className="space-y-4">
+      <section aria-labelledby="settings-focus-timer" className="space-y-4">
         <div className="flex justify-between items-center">
-          <h3 className="text-text text-sm">Focus Timer</h3>
+          <h3 id="settings-focus-timer" className="text-text text-sm">Focus Timer</h3>
           {focusTimeRemaining && (
             <span className="text-accent text-sm">Remaining: {focusTimeRemaining}</span>
           )}
@@ -309,11 +378,11 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </section>
 
       {/* Background Noise */}
-      <div className="space-y-4">
-        <h3 className="text-text text-sm">Background Noise</h3>
+      <section aria-labelledby="settings-noise" className="space-y-4">
+        <h3 id="settings-noise" className="text-text text-sm">Background Noise</h3>
         <div className="flex gap-2 flex-wrap">
           {NOISE_TYPE_OPTIONS.map((option) => (
             <button
@@ -341,6 +410,7 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
               <span>{Math.round(localNoiseVolume * 100)}%</span>
             </div>
             <Slider
+              aria-label="Noise volume"
               value={[localNoiseVolume]}
               onValueChange={([v]) => setLocalNoiseVolume(v)}
               onValueCommit={handleNoiseVolumeCommit}
@@ -350,12 +420,32 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
             />
           </motion.div>
         )}
-      </div>
+      </section>
+
+      {/* Visualizer */}
+      <section aria-labelledby="settings-visualizer" className="space-y-4">
+        <h3 id="settings-visualizer" className="text-text text-sm">Visualizer</h3>
+        <div className="flex gap-2 flex-wrap">
+          {VISUALIZER_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => setVisualizerType(option.value)}
+              className={`px-4 py-2 rounded-xl text-sm transition-colors ${
+                visualizerType === option.value
+                  ? 'bg-accent/25 text-accent border border-accent/30'
+                  : 'text-text-muted hover:text-text hover:bg-white/5'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* Sleep Timer */}
-      <div className="space-y-4">
+      <section aria-labelledby="settings-sleep-timer" className="space-y-4">
         <div className="flex justify-between items-center">
-          <h3 className="text-text text-sm">Sleep Timer</h3>
+          <h3 id="settings-sleep-timer" className="text-text text-sm">Sleep Timer</h3>
           {sleepTimeRemaining && (
             <span className="text-accent text-sm">{sleepTimeRemaining}</span>
           )}
@@ -375,10 +465,10 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
             </button>
           ))}
         </div>
-      </div>
+      </section>
 
       {/* Advanced Settings (Collapsible) */}
-      <div className="space-y-4">
+      <section aria-labelledby="settings-advanced" className="space-y-4">
         <button
           onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
           className="flex items-center gap-2 text-text-muted hover:text-text transition-colors"
@@ -392,7 +482,7 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
           >
             <path d="M9 18l6-6-6-6" />
           </svg>
-          <span className="text-sm">Advanced Settings</span>
+          <span id="settings-advanced" className="text-sm">Advanced Settings</span>
         </button>
 
         <AnimatePresence>
@@ -418,6 +508,7 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
                       <span>{localBpmMin} BPM</span>
                     </div>
                     <Slider
+                      aria-label="Minimum BPM"
                       value={[localBpmMin]}
                       onValueChange={([v]) => setLocalBpmMin(v)}
                       onValueCommit={handleBpmMinCommit}
@@ -432,6 +523,7 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
                       <span>{localBpmMax} BPM</span>
                     </div>
                     <Slider
+                      aria-label="Maximum BPM"
                       value={[localBpmMax]}
                       onValueChange={([v]) => setLocalBpmMax(v)}
                       onValueCommit={handleBpmMaxCommit}
@@ -460,6 +552,7 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
                     <span>Discover</span>
                   </div>
                   <Slider
+                    aria-label="Discovery mode level"
                     value={[localExploration]}
                     onValueChange={([v]) => setLocalExploration(v)}
                     onValueCommit={handleExplorationCommit}
@@ -473,7 +566,7 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
                 </div>
               </div>
 
-              <StatsSection totalSongs={totalSongs} likeCount={likeCount} skipCount={skipCount} />
+              <StatsSection totalSongs={totalSongs} likeCount={likeCount} skipCount={skipCount} isLoading={isLoading} />
               <LearningProgress exploitationRatio={exploitationRatio} totalSongs={totalSongs} />
               <LearnedPreferences bestParams={bestParams} />
 
@@ -488,7 +581,54 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </section>
+
+      {/* Your Data */}
+      <section aria-labelledby="settings-data" className="space-y-4">
+        <h3 id="settings-data" className="text-text text-sm">Your Data</h3>
+        <div className="flex gap-3">
+          <button
+            onClick={handleExport}
+            className="flex-1 py-3 rounded-xl glass-light text-text text-sm hover:bg-white/10 transition-colors"
+          >
+            Export Data
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex-1 py-3 rounded-xl glass-light text-text text-sm hover:bg-white/10 transition-colors"
+          >
+            Import Data
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleImport}
+            className="hidden"
+          />
+        </div>
+        <p className="text-text-muted text-xs">
+          Export your preferences and listening history, or import from a backup.
+        </p>
+      </section>
+
+      {/* Insights & Sharing */}
+      <section className="space-y-3">
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowAnalytics(true)}
+            className="flex-1 py-3 rounded-xl glass-light text-text text-sm hover:bg-white/10 transition-colors"
+          >
+            View Insights
+          </button>
+          <button
+            onClick={handleShareTaste}
+            className="flex-1 py-3 rounded-xl glass-light text-text text-sm hover:bg-white/10 transition-colors"
+          >
+            Share Your Taste
+          </button>
+        </div>
+      </section>
 
       {/* About */}
       <div className="text-center space-y-2 pt-6">
@@ -501,13 +641,17 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
   );
 
   return (
-    <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DrawerContent className="safe-area-bottom">
-        <DrawerTitle className="sr-only">Settings</DrawerTitle>
-        <div className="overflow-y-auto overscroll-contain px-6 pb-10 max-h-[80vh]">
-          {settingsContent}
-        </div>
-      </DrawerContent>
-    </Drawer>
+    <>
+      <Drawer open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DrawerContent className="safe-area-bottom">
+          <DrawerTitle className="sr-only">Settings</DrawerTitle>
+          <DrawerDescription className="sr-only">Adjust focus timer, background noise, sleep timer, and advanced music preferences.</DrawerDescription>
+          <div className="overflow-y-auto overscroll-contain px-6 pb-10 max-h-[80vh]">
+            {settingsContent}
+          </div>
+        </DrawerContent>
+      </Drawer>
+      <AnalyticsDashboard isOpen={showAnalytics} onClose={() => setShowAnalytics(false)} />
+    </>
   );
 }

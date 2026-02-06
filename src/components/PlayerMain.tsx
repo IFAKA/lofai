@@ -11,7 +11,7 @@ import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts";
 import { useSleepTimer } from "@/lib/hooks/useSleepTimer";
 import { useFocusTimer } from "@/lib/hooks/useFocusTimer";
 import { useVolumeSlider } from "@/lib/hooks/useVolumeSlider";
-import { LavaLamp } from "./visualizer/LavaLamp";
+import { LavaLamp, WaveformBars, ParticleField, MinimalDots } from "./visualizer";
 import { FocusMode } from "./ui/FocusMode";
 import { PlayButton } from "./player/PlayButton";
 import { GenerateButton } from "./player/GenerateButton";
@@ -27,11 +27,14 @@ import {
   applyWarmStart,
   OnboardingPreferences,
 } from "@/lib/preferences/warmStart";
+import { ErrorBoundary } from "./ui/ErrorBoundary";
+import { decodeTasteProfile } from "@/lib/preferences/tasteProfile";
 
 export function Player() {
   const {
     isPlaying,
     isLoading,
+    isModelLoading,
     bpm,
     volume,
     error,
@@ -69,6 +72,7 @@ export function Player() {
     startFocusSession,
     pauseFocusSession,
     focusElapsedMs,
+    visualizerType,
   } = useSettingsStore();
   const { isDesktop } = useIsMobile();
   const {
@@ -175,6 +179,25 @@ export function Player() {
     }
   }, [startOnboarding]);
 
+  // Handle ?taste= URL parameter for taste profile import
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tasteParam = params.get("taste");
+    if (!tasteParam) return;
+
+    const profile = decodeTasteProfile(tasteParam);
+    if (profile) {
+      toast(`Taste profile: ${profile.summary}`, {
+        duration: 5000,
+        position: "top-center",
+      });
+      // Clean up URL
+      const url = new URL(window.location.href);
+      url.searchParams.delete("taste");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
+
   const handleTap = useCallback(() => {
     // Close volume slider when clicking outside on any device
     if (showVolumeSlider) {
@@ -261,7 +284,9 @@ export function Player() {
         }}
       />
 
-      <Settings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <ErrorBoundary name="Settings">
+        <Settings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      </ErrorBoundary>
 
       <div
         ref={containerRef}
@@ -269,7 +294,17 @@ export function Player() {
         onClick={handleTap}
         onMouseMove={isDesktop ? handleMouseMove : undefined}
       >
-        <LavaLamp isPlaying={isPlaying} bpm={bpm} />
+        <ErrorBoundary name="Visualizer" fallback={<div className="absolute inset-0 bg-bg" />}>
+          {visualizerType === 'waveform' ? (
+            <WaveformBars isPlaying={isPlaying} bpm={bpm} />
+          ) : visualizerType === 'particles' ? (
+            <ParticleField isPlaying={isPlaying} bpm={bpm} />
+          ) : visualizerType === 'dots' ? (
+            <MinimalDots isPlaying={isPlaying} bpm={bpm} />
+          ) : (
+            <LavaLamp isPlaying={isPlaying} bpm={bpm} />
+          )}
+        </ErrorBoundary>
 
         {!isDesktop && (
           <FocusMode
@@ -324,6 +359,7 @@ export function Player() {
                   focusElapsedMs={focusElapsedMs}
                   isVisible={true}
                   isPlaying={isPlaying}
+                  isLoading={isLoading && !isPlaying}
                 />
 
                 <FeedbackButtons
@@ -340,7 +376,7 @@ export function Player() {
                     <PlayButton
                       isPlaying={isPlaying}
                       isLoading={isLoading}
-                      loadingText={isPlaying ? undefined : "Generating..."}
+                      loadingText={isLoading ? (isModelLoading ? "Loading AI model..." : "Generating...") : undefined}
                       onClick={() => {
                         closeVolumeSlider();
                         togglePlayback();

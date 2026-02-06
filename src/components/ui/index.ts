@@ -2,6 +2,8 @@
 export { GlassButton } from './GlassButton';
 export { FocusMode } from './FocusMode';
 export { FullscreenOverlay } from './Modal';
+export { ErrorBoundary } from './ErrorBoundary';
+export { Skeleton } from './Skeleton';
 
 // shadcn/ui components
 export * from './button';

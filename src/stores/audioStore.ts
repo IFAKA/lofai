@@ -13,6 +13,7 @@ interface AudioStore {
 
   volume: number;
   isLoading: boolean;
+  isModelLoading: boolean;
   error: string | null;
 
   samplesLoading: boolean;
@@ -59,18 +60,19 @@ export const useAudioStore = create<AudioStore>((set, get) => {
     progressIndex: 0,
     volume: 0.8,
     isLoading: false,
+    isModelLoading: false,
     error: null,
 
     samplesLoading: false,
     samplesLoaded: false,
 
     initialize: async () => {
-      set({ isLoading: true });
+      set({ isLoading: true, isModelLoading: true });
       try {
         await audioEngine.initialize();
         audioEngine.setVolume(get().volume);
       } finally {
-        set({ isLoading: false });
+        set({ isLoading: false, isModelLoading: false });
       }
     },
 

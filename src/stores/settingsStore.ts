@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { VisualizerType } from '@/components/visualizer/types';
 
 export type NoiseType = 'off' | 'white' | 'pink' | 'brown';
 
@@ -22,6 +23,7 @@ interface SettingsStore {
   focusSessionStart: number | null;
   focusElapsedMs: number; // Accumulated focus time across pause/resume
   showAdvancedSettings: boolean;
+  visualizerType: VisualizerType;
 
   setBpmRange: (min: number, max: number) => void;
   setExplorationLevel: (level: number) => void;
@@ -38,6 +40,7 @@ interface SettingsStore {
   pauseFocusSession: () => void;
   resetFocusSession: () => void;
   setShowAdvancedSettings: (show: boolean) => void;
+  setVisualizerType: (type: VisualizerType) => void;
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -61,6 +64,7 @@ export const useSettingsStore = create<SettingsStore>()(
       focusSessionStart: null,
       focusElapsedMs: 0,
       showAdvancedSettings: false,
+      visualizerType: 'lava' as VisualizerType,
 
       setBpmRange: (min, max) => {
         const clampedMin = Math.max(60, Math.min(100, min));
@@ -137,6 +141,10 @@ export const useSettingsStore = create<SettingsStore>()(
       setShowAdvancedSettings: (show) => {
         set({ showAdvancedSettings: show });
       },
+
+      setVisualizerType: (type) => {
+        set({ visualizerType: type });
+      },
     }),
     {
       name: 'lofai-settings',
@@ -149,6 +157,7 @@ export const useSettingsStore = create<SettingsStore>()(
         noiseType: state.noiseType,
         noiseVolume: state.noiseVolume,
         showAdvancedSettings: state.showAdvancedSettings,
+        visualizerType: state.visualizerType,
       }),
     }
   )

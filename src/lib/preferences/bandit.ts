@@ -52,7 +52,7 @@ export function sampleBeta(alpha: number, beta: number): number {
   return x / (x + y);
 }
 
-function selectArm<T extends string>(
+export function selectArm<T extends string>(
   arms: Record<T, ArmDistribution>,
   allowedArms?: T[],
   explorationBias: number = 0.5
@@ -105,7 +105,7 @@ export async function selectGenerationParams(): Promise<GenerationParams> {
   };
 }
 
-function updateArmDist(dist: ArmDistribution, reward: number): ArmDistribution {
+export function updateArmDist(dist: ArmDistribution, reward: number): ArmDistribution {
   if (reward > 0) {
     return { alpha: dist.alpha + reward, beta: dist.beta };
   } else {

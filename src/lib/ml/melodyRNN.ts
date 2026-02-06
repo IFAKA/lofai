@@ -22,9 +22,25 @@ interface MusicRNN {
   dispose(): void;
 }
 
+const RETRY_DELAYS = [1000, 3000, 8000];
+
 let model: MusicRNN | null = null;
 let isLoading = false;
 let loadPromise: Promise<void> | null = null;
+
+async function retryWithBackoff<T>(fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt <= RETRY_DELAYS.length; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (attempt === RETRY_DELAYS.length) throw error;
+      const delay = RETRY_DELAYS[attempt];
+      console.warn(`[MelodyRNN] Attempt ${attempt + 1} failed, retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  throw new Error('Unreachable');
+}
 
 export async function initMelodyRNN(): Promise<void> {
   if (model) return;
@@ -34,12 +50,14 @@ export async function initMelodyRNN(): Promise<void> {
 
   loadPromise = (async () => {
     try {
-      const { MusicRNN } = await import('@magenta/music/esm/music_rnn');
-
-      const modelUrl = getModelUrl('improv_rnn');
-      model = new MusicRNN(modelUrl) as unknown as MusicRNN;
-      await model.initialize();
+      await retryWithBackoff(async () => {
+        const { MusicRNN } = await import('@magenta/music/esm/music_rnn');
+        const modelUrl = getModelUrl('improv_rnn');
+        model = new MusicRNN(modelUrl) as unknown as MusicRNN;
+        await model.initialize();
+      });
     } catch (error) {
+      loadPromise = null;
       throw error;
     } finally {
       isLoading = false;

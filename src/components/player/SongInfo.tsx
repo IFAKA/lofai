@@ -2,12 +2,14 @@
 
 import { memo, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Skeleton } from '../ui/Skeleton';
 
 interface SongInfoProps {
   focusSessionStart: number | null;
   focusElapsedMs: number;
   isVisible: boolean;
   isPlaying: boolean;
+  isLoading?: boolean;
 }
 
 export const SongInfo = memo(function SongInfo({
@@ -15,6 +17,7 @@ export const SongInfo = memo(function SongInfo({
   focusElapsedMs,
   isVisible,
   isPlaying,
+  isLoading,
 }: SongInfoProps) {
   const [focusMinutes, setFocusMinutes] = useState(0);
 
@@ -47,9 +50,13 @@ export const SongInfo = memo(function SongInfo({
           transition={{ duration: 0.2 }}
           className="text-center"
         >
-          <div className="text-text-muted text-sm md:text-base">
-            Focused: {focusMinutes} min
-          </div>
+          {isLoading ? (
+            <Skeleton className="h-5 w-28 mx-auto" />
+          ) : (
+            <div className="text-text-muted text-sm md:text-base">
+              Focused: {focusMinutes} min
+            </div>
+          )}
         </motion.div>
       )}
     </AnimatePresence>

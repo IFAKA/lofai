@@ -1,18 +1,14 @@
 import * as Tone from 'tone';
 import { Chord, ChordProgression, FIVE_TO_FIVE, INTERVAL_WEIGHTS, MINOR_KEYS, MAJOR_KEYS } from './chords';
+import { GenerationParams } from '@/lib/preferences/types';
+import { createSynthResources, disposeSynthResources, type SynthResources } from './synthSetup';
+import { createSequences, startSequences, stopSequences, disposeSequences, type Sequences } from './sequencer';
 import {
-  GenerationParams,
-  TempoArm,
-  EnergyArm,
-  ValenceArm,
-  DanceabilityArm,
-  TEMPO_RANGES,
-  ENERGY_PARAMS,
-  VALENCE_PARAMS,
-  DANCEABILITY_PARAMS,
-} from '@/lib/preferences/types';
-
-const SAMPLES_PATH = '/samples/engine';
+  computeTempoParams,
+  computeEnergyParams,
+  computeDanceabilityParams,
+  computeValenceParams,
+} from './paramApplicator';
 
 export type NoiseType = 'off' | 'white' | 'pink' | 'brown';
 
@@ -25,6 +21,7 @@ interface GenerativeState {
   bpm: number;
   noiseType: NoiseType;
   noiseVolume: number;
+  sampleLoadErrors: string[];
 }
 
 class GenerativeEngine {
@@ -34,32 +31,14 @@ class GenerativeEngine {
     key: 'C',
     progression: [],
     progressIndex: 0,
-    bpm: 156, // With swing this feels like ~78
+    bpm: 156,
     noiseType: 'pink',
     noiseVolume: 0.3,
+    sampleLoadErrors: [],
   };
 
-  private piano: Tone.Sampler | null = null;
-  private kick: Tone.Sampler | null = null;
-  private snare: Tone.Sampler | null = null;
-  private hat: Tone.Sampler | null = null;
-  private noise: Tone.Noise | null = null;
-
-  private pianoFilter: Tone.Filter | null = null;
-  private stereoWidener: Tone.StereoWidener | null = null;
-
-  private noiseFilter: Tone.Filter | null = null;
-  private noiseVol: Tone.Volume | null = null;
-
-  private compressor: Tone.Compressor | null = null;
-  private masterFilter: Tone.Filter | null = null;
-  private masterVol: Tone.Volume | null = null;
-
-  private chordSeq: Tone.Sequence | null = null;
-  private melodySeq: Tone.Sequence | null = null;
-  private kickSeq: Tone.Sequence | null = null;
-  private snareSeq: Tone.Sequence | null = null;
-  private hatSeq: Tone.Sequence | null = null;
+  private resources: SynthResources | null = null;
+  private sequences: Sequences | null = null;
 
   private scale: string[] = [];
   private scalePos: number = 0;
@@ -84,143 +63,33 @@ class GenerativeEngine {
 
   async initialize(): Promise<void> {
     if (this.loadPromise) return this.loadPromise;
-
     this.loadPromise = this._initialize();
     return this.loadPromise;
   }
 
   private async _initialize(): Promise<void> {
-    this.compressor = new Tone.Compressor({
-      threshold: -6,
-      ratio: 3,
-      attack: 0.5,
-      release: 0.1,
+    this.resources = await createSynthResources((msg) => {
+      this.state.sampleLoadErrors.push(msg);
     });
-
-    this.masterFilter = new Tone.Filter(2000, 'lowpass');
-    this.masterVol = new Tone.Volume(0);
-
-    Tone.getDestination().chain(this.compressor, this.masterFilter, this.masterVol);
-
-    this.pianoFilter = new Tone.Filter(1000, 'lowpass');
-    this.stereoWidener = new Tone.StereoWidener(0.5);
-
-    this.noiseFilter = new Tone.Filter(2000, 'lowshelf');
-    this.noiseVol = new Tone.Volume(-32);
-    this.noise = new Tone.Noise('pink');
-    this.noise.chain(this.noiseFilter, this.noiseVol, Tone.getDestination());
 
     Tone.getTransport().bpm.value = this.state.bpm;
     Tone.getTransport().swing = 1;
 
-    await Promise.all([this.loadPiano(), this.loadDrums()]);
-    this.setupSequences();
+    this.sequences = createSequences(this.resources, {
+      onChordTick: () => this.playChord(),
+      onMelodyTick: () => this.playMelody(),
+      getKickState: () => ({ kickOff: this.kickOff, kickEmphasis: this.kickEmphasis }),
+      getSnareState: () => ({ snareOff: this.snareOff }),
+      getHatState: () => ({ hatOff: this.hatOff, hihatActivity: this.hihatActivity }),
+    });
 
     this.state.isLoaded = true;
     this.notifyListeners();
   }
 
-  private async loadPiano(): Promise<void> {
-    return new Promise((resolve) => {
-      const urls: Record<string, string> = {};
-
-      ['C', 'Dsharp', 'Fsharp', 'A'].forEach(note => {
-        for (let octave = 1; octave <= 6; octave++) {
-          const key = note === 'Dsharp' ? `D#${octave}` : note === 'Fsharp' ? `F#${octave}` : `${note}${octave}`;
-          urls[key] = `${SAMPLES_PATH}/piano/${note}${octave}v1.mp3`;
-        }
-      });
-
-      this.piano = new Tone.Sampler({
-        urls,
-        baseUrl: '',
-        onload: () => resolve(),
-        onerror: () => resolve(),
-      });
-
-      if (this.pianoFilter && this.stereoWidener) {
-        this.piano.chain(this.pianoFilter, this.stereoWidener, Tone.getDestination());
-      } else {
-        this.piano.toDestination();
-      }
-    });
-  }
-
-  private async loadDrums(): Promise<void> {
-    return new Promise((resolve) => {
-      let loaded = 0;
-      const checkLoaded = () => {
-        loaded++;
-        if (loaded >= 3) resolve();
-      };
-
-      this.kick = new Tone.Sampler({
-        urls: { C4: `${SAMPLES_PATH}/drums/kick.mp3` },
-        onload: checkLoaded,
-      }).toDestination();
-
-      this.snare = new Tone.Sampler({
-        urls: { C4: `${SAMPLES_PATH}/drums/snare.mp3` },
-        volume: -4,
-        onload: checkLoaded,
-      }).toDestination();
-
-      this.hat = new Tone.Sampler({
-        urls: { C4: `${SAMPLES_PATH}/drums/hat.mp3` },
-        volume: -6,
-        onload: checkLoaded,
-      }).toDestination();
-    });
-  }
-
-  private setupSequences(): void {
-    this.chordSeq = new Tone.Sequence(() => this.playChord(), [''], '1n');
-    this.chordSeq.humanize = true;
-
-    this.melodySeq = new Tone.Sequence(() => this.playMelody(), [''], '8n');
-    this.melodySeq.humanize = true;
-
-    this.kickSeq = new Tone.Sequence(
-      (time, note) => {
-        if (!this.kickOff && note === 'C4') {
-          if (Math.random() < (0.6 + this.kickEmphasis * 0.35)) {
-            this.kick?.triggerAttack('C4', time);
-          }
-        } else if (!this.kickOff && note === '.' && Math.random() < (this.kickEmphasis * 0.15)) {
-          this.kick?.triggerAttack('C4', time);
-        }
-      },
-      ['C4', '', '', '', '', '', '', 'C4', 'C4', '', '.', '', '', '', '', ''],
-      '8n'
-    );
-    this.kickSeq.humanize = true;
-
-    this.snareSeq = new Tone.Sequence(
-      (time, note) => {
-        if (!this.snareOff && note !== '' && Math.random() < 0.8) {
-          this.snare?.triggerAttack('C4', time);
-        }
-      },
-      ['', 'C4'],
-      '2n'
-    );
-    this.snareSeq.humanize = true;
-
-    this.hatSeq = new Tone.Sequence(
-      (time, note) => {
-        if (!this.hatOff && note !== '' && Math.random() < (0.5 + this.hihatActivity * 0.4)) {
-          this.hat?.triggerAttack('C4', time);
-        }
-      },
-      ['C4', 'C4', 'C4', 'C4', 'C4', 'C4', 'C4', 'C4'],
-      '4n'
-    );
-    this.hatSeq.humanize = true;
-  }
-
   private playChord(): void {
     const chord = this.state.progression[this.state.progressIndex];
-    if (!chord || !this.piano) return;
+    if (!chord || !this.resources) return;
 
     const root = Tone.Frequency(this.state.key + '3').transpose(chord.semitoneDist);
     const voicing = chord.generateVoicing(4);
@@ -228,7 +97,7 @@ class GenerativeEngine {
       .harmonize(voicing)
       .map(f => Tone.Frequency(f).toNote());
 
-    this.piano.triggerAttackRelease(notes, '1n');
+    this.resources.piano.triggerAttackRelease(notes, '1n');
     this.nextChord();
   }
 
@@ -257,7 +126,7 @@ class GenerativeEngine {
   }
 
   private playMelody(): void {
-    if (this.melodyOff || Math.random() > this.melodyDensity || !this.piano) return;
+    if (this.melodyOff || Math.random() > this.melodyDensity || !this.resources) return;
 
     const descendRange = Math.min(this.scalePos, 7) + 1;
     const ascendRange = Math.min(this.scale.length - this.scalePos, 7);
@@ -292,7 +161,7 @@ class GenerativeEngine {
     const newScalePos = this.scalePos + (descend ? -scaleDist : scaleDist);
     if (newScalePos >= 0 && newScalePos < this.scale.length) {
       this.scalePos = newScalePos;
-      this.piano.triggerAttackRelease(this.scale[newScalePos], '2n', undefined, this.currentVelocity);
+      this.resources.piano.triggerAttackRelease(this.scale[newScalePos], '2n', undefined, this.currentVelocity);
     }
   }
 
@@ -324,10 +193,10 @@ class GenerativeEngine {
     this.hatOff = Math.random() < 0.22;
     this.melodyOff = Math.random() < 0.25;
 
-    if (this.masterFilter) {
-      this.masterFilter.frequency.linearRampTo(300, 2);
+    if (this.resources?.masterFilter) {
+      this.resources.masterFilter.frequency.linearRampTo(300, 2);
       setTimeout(() => {
-        this.masterFilter?.frequency.linearRampTo(2000, 2);
+        this.resources?.masterFilter?.frequency.linearRampTo(2000, 2);
       }, 2000);
     }
 
@@ -347,14 +216,10 @@ class GenerativeEngine {
     }
 
     Tone.getTransport().start();
-    this.chordSeq?.start(0);
-    this.melodySeq?.start(0);
-    this.kickSeq?.start(0);
-    this.snareSeq?.start(0);
-    this.hatSeq?.start(0);
+    if (this.sequences) startSequences(this.sequences);
 
     if (this.state.noiseType !== 'off') {
-      this.noise?.start();
+      this.resources?.noise.start();
     }
 
     this.state.isPlaying = true;
@@ -363,19 +228,15 @@ class GenerativeEngine {
 
   pause(): void {
     Tone.getTransport().pause();
-    this.noise?.stop();
+    this.resources?.noise.stop();
     this.state.isPlaying = false;
     this.notifyListeners();
   }
 
   stop(): void {
     Tone.getTransport().stop();
-    this.chordSeq?.stop();
-    this.melodySeq?.stop();
-    this.kickSeq?.stop();
-    this.snareSeq?.stop();
-    this.hatSeq?.stop();
-    this.noise?.stop();
+    if (this.sequences) stopSequences(this.sequences);
+    this.resources?.noise.stop();
 
     this.state.isPlaying = false;
     this.state.progressIndex = 0;
@@ -388,20 +249,20 @@ class GenerativeEngine {
   }
 
   setVolume(volume: number): void {
-    if (this.masterVol) {
-      this.masterVol.volume.value = volume === 0 ? -Infinity : 20 * Math.log10(volume);
+    if (this.resources?.masterVol) {
+      this.resources.masterVol.volume.value = volume === 0 ? -Infinity : 20 * Math.log10(volume);
     }
   }
 
   setNoiseType(type: NoiseType): void {
     this.state.noiseType = type;
-    if (!this.noise) return;
+    if (!this.resources?.noise) return;
 
     if (type === 'off') {
-      if (this.state.isPlaying) this.noise.stop();
+      if (this.state.isPlaying) this.resources.noise.stop();
     } else {
-      this.noise.type = type;
-      if (this.state.isPlaying) this.noise.start();
+      this.resources.noise.type = type;
+      if (this.state.isPlaying) this.resources.noise.start();
     }
 
     this.notifyListeners();
@@ -409,8 +270,8 @@ class GenerativeEngine {
 
   setNoiseVolume(volume: number): void {
     this.state.noiseVolume = Math.max(0, Math.min(1, volume));
-    if (this.noiseVol) {
-      this.noiseVol.volume.value = volume === 0 ? -Infinity : -60 + volume * 40;
+    if (this.resources?.noiseVol) {
+      this.resources.noiseVol.volume.value = volume === 0 ? -Infinity : -60 + volume * 40;
     }
     this.notifyListeners();
   }
@@ -429,31 +290,30 @@ class GenerativeEngine {
     this.listeners.forEach(l => l(state));
   }
 
-  applyTempo(tempoArm: TempoArm): void {
-    const range = TEMPO_RANGES[tempoArm];
-    const targetBpm = range.min + Math.random() * (range.max - range.min);
-    this.state.bpm = Math.round(targetBpm * 2);
+  applyTempo(tempoArm: Parameters<typeof computeTempoParams>[0]): void {
+    const result = computeTempoParams(tempoArm);
+    this.state.bpm = result.bpm;
     Tone.getTransport().bpm.value = this.state.bpm;
   }
 
-  applyEnergy(energyArm: EnergyArm): void {
-    const params = ENERGY_PARAMS[energyArm];
-    this.melodyDensity = params.density;
-    this.currentVelocity = params.velocity;
-    this.kickOff = params.instruments < 3;
-    this.snareOff = params.instruments < 4;
+  applyEnergy(energyArm: Parameters<typeof computeEnergyParams>[0]): void {
+    const result = computeEnergyParams(energyArm);
+    this.melodyDensity = result.melodyDensity;
+    this.currentVelocity = result.velocity;
+    this.kickOff = result.kickOff;
+    this.snareOff = result.snareOff;
   }
 
-  applyDanceability(danceabilityArm: DanceabilityArm): void {
-    const params = DANCEABILITY_PARAMS[danceabilityArm];
-    Tone.getTransport().swing = params.swing;
-    this.kickEmphasis = params.kickEmphasis;
-    this.hihatActivity = params.hihatActivity;
+  applyDanceability(danceabilityArm: Parameters<typeof computeDanceabilityParams>[0]): void {
+    const result = computeDanceabilityParams(danceabilityArm);
+    Tone.getTransport().swing = result.swing;
+    this.kickEmphasis = result.kickEmphasis;
+    this.hihatActivity = result.hihatActivity;
   }
 
-  applyValence(valenceArm: ValenceArm): void {
-    const params = VALENCE_PARAMS[valenceArm];
-    this.preferMinor = params.useMinor;
+  applyValence(valenceArm: Parameters<typeof computeValenceParams>[0]): void {
+    const result = computeValenceParams(valenceArm);
+    this.preferMinor = result.preferMinor;
   }
 
   applyGenerationParams(params: GenerationParams): void {
@@ -471,28 +331,8 @@ class GenerativeEngine {
 
   dispose(): void {
     this.stop();
-
-    this.piano?.dispose();
-    this.kick?.dispose();
-    this.snare?.dispose();
-    this.hat?.dispose();
-    this.noise?.dispose();
-
-    this.pianoFilter?.dispose();
-    this.stereoWidener?.dispose();
-
-    this.noiseFilter?.dispose();
-    this.noiseVol?.dispose();
-
-    this.compressor?.dispose();
-    this.masterFilter?.dispose();
-    this.masterVol?.dispose();
-
-    this.chordSeq?.dispose();
-    this.melodySeq?.dispose();
-    this.kickSeq?.dispose();
-    this.snareSeq?.dispose();
-    this.hatSeq?.dispose();
+    if (this.sequences) disposeSequences(this.sequences);
+    if (this.resources) disposeSynthResources(this.resources);
   }
 }
 

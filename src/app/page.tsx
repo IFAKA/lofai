@@ -1,5 +1,10 @@
 import { Player } from '@/components/PlayerMain';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
 export default function Home() {
-  return <Player />;
+  return (
+    <ErrorBoundary name="Player">
+      <Player />
+    </ErrorBoundary>
+  );
 }
