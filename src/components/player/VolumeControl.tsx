@@ -71,7 +71,7 @@ export const VolumeSlider = memo(function VolumeSlider({ volume, onChange, isVis
             className="text-text-muted hover:text-text transition-colors flex-shrink-0 flex items-center justify-center"
             aria-label="Mute"
           >
-            <Volume className="w-6 h-6 md:w-7 md:h-7" />
+            {volume === 0 ? <VolumeX className="w-6 h-6 md:w-7 md:h-7" /> : <Volume className="w-6 h-6 md:w-7 md:h-7" />}
           </button>
 
           <Slider
