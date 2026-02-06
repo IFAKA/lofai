@@ -6,11 +6,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 interface FocusModeProps {
   isActive: boolean;
   focusTimerEndTime: number | null;
+  isLandscape?: boolean;
 }
 
 export const FocusMode = memo(function FocusMode({
   isActive,
   focusTimerEndTime,
+  isLandscape = false,
 }: FocusModeProps) {
   const [time, setTime] = useState<string>('');
   const [timerRemaining, setTimerRemaining] = useState<string | null>(null);
@@ -60,14 +62,14 @@ export const FocusMode = memo(function FocusMode({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.5 }}
-          className="fixed inset-0 z-20 flex flex-col items-center justify-center pointer-events-none gap-4"
+          className={`fixed inset-0 z-20 flex flex-col items-center justify-center pointer-events-none ${isLandscape ? 'gap-2' : 'gap-4'}`}
         >
           {/* Current time */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.2, duration: 0.4 }}
-            className="text-text-muted/70 text-6xl font-light tracking-widest"
+            className={`text-text-muted/70 font-light tracking-widest ${isLandscape ? 'text-4xl' : 'text-6xl'}`}
           >
             {time}
           </motion.div>

@@ -341,6 +341,22 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   top: var(--space-4);
 }
 
+/* Touch devices in landscape: expand drawer height, compact padding */
+@media (orientation: landscape) and (pointer: coarse) {
+  .drawer-bottom-landscape[data-vaul-drawer-direction="bottom"] {
+    max-height: 96vh;
+  }
+
+  .drawer-scroll-landscape {
+    max-height: 90vh;
+  }
+
+  .landscape-touch-compact {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+}
+
 @media (min-width: 768px) {
   .desktop\:text-lg {
     font-size: 1.125rem;

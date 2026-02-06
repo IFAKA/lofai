@@ -19,11 +19,15 @@ function isTouchDevice(): boolean {
   );
 }
 
-function getDeviceType(width: number): DeviceType {
-  // Use screen width as primary indicator - touch capability doesn't determine device type
-  // Many desktops have touchscreens, many tablets have keyboards
-  if (width < SM_BREAKPOINT) return 'phone';
-  if (width < MD_BREAKPOINT) return 'tablet';
+function getDeviceType(): DeviceType {
+  if (typeof window === 'undefined') return 'desktop';
+
+  const isTouch = isTouchDevice();
+  // Use screen dimensions (physical, don't change on rotation) not viewport
+  const shortSide = Math.min(window.screen.width, window.screen.height);
+
+  if (isTouch && shortSide < SM_BREAKPOINT) return 'phone';
+  if (isTouch && shortSide < MD_BREAKPOINT) return 'tablet';
   return 'desktop';
 }
 
@@ -66,6 +70,7 @@ export function useIsMobile() {
   const [state, setState] = useState({
     isMobile: false,
     isCompact: false,
+    isLandscape: false,
     deviceType: 'desktop' as DeviceType,
     screenWidth: 1024,
     screenHeight: 768,
@@ -75,11 +80,12 @@ export function useIsMobile() {
     const update = () => {
       const width = window.innerWidth;
       const height = window.innerHeight;
-      const device = getDeviceType(width);
+      const device = getDeviceType();
 
       setState({
         isMobile: isTouchDevice(),
-        isCompact: width < MD_BREAKPOINT,
+        isCompact: device !== 'desktop',
+        isLandscape: width > height,
         deviceType: device,
         screenWidth: width,
         screenHeight: height,
@@ -104,8 +110,7 @@ export function usePerformanceTier(): 'high' | 'medium' | 'low' {
 
   useEffect(() => {
     const update = () => {
-      const width = window.innerWidth;
-      const device = getDeviceType(width);
+      const device = getDeviceType();
       setDeviceType(device);
       setTier(detectPerformanceTier(device));
     };

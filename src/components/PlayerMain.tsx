@@ -74,7 +74,7 @@ export function Player() {
     focusElapsedMs,
     visualizerType,
   } = useSettingsStore();
-  const { isDesktop } = useIsMobile();
+  const { isDesktop, isLandscape, deviceType } = useIsMobile();
   const {
     setNoiseType: setAudioNoiseType,
     setNoiseVolume: setAudioNoiseVolume,
@@ -310,6 +310,7 @@ export function Player() {
           <FocusMode
             isActive={!controlsVisible && isPlaying}
             focusTimerEndTime={focusTimerEndTime}
+            isLandscape={isLandscape}
           />
         )}
 
@@ -319,7 +320,7 @@ export function Player() {
             relative z-10 h-full flex flex-col items-center
             justify-end md:justify-between
             safe-area-top safe-area-bottom safe-area-left safe-area-right
-            pt-12 pb-8 px-6 md:py-16 md:px-8
+            ${deviceType === 'phone' && isLandscape ? 'pt-4 pb-4 px-6' : 'pt-12 pb-8 px-6 md:py-16 md:px-8'}
           `}
         >
           {/* Top section - absolute on mobile, relative on desktop */}
@@ -344,7 +345,7 @@ export function Player() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.2 }}
-                className="flex flex-col items-center gap-6 md:gap-8"
+                className={`flex flex-col items-center ${deviceType === 'phone' && isLandscape ? 'gap-3' : 'gap-6 md:gap-8'}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   // Close volume slider when clicking anywhere in controls (including other buttons)

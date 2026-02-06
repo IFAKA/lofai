@@ -648,7 +648,7 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
         <DrawerContent className="safe-area-bottom">
           <DrawerTitle className="sr-only">Settings</DrawerTitle>
           <DrawerDescription className="sr-only">Adjust focus timer, background noise, sleep timer, and advanced music preferences.</DrawerDescription>
-          <div className="overflow-y-auto overscroll-contain px-6 pb-10 max-h-[80vh]">
+          <div className="overflow-y-auto overscroll-contain px-6 pb-10 max-h-[80vh] drawer-scroll-landscape">
             {settingsContent}
           </div>
         </DrawerContent>
