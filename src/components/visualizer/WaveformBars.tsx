@@ -138,7 +138,7 @@ export const WaveformBars = memo(function WaveformBars({ isPlaying }: Visualizer
     <AnimatePresence>
       {hasEverPlayed && (
         <motion.div
-          className="absolute inset-0 flex items-end pointer-events-none"
+          className="absolute inset-0 pointer-events-none"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -146,8 +146,7 @@ export const WaveformBars = memo(function WaveformBars({ isPlaying }: Visualizer
         >
           <canvas
             ref={canvasRef}
-            className="w-full"
-            style={{ height: '60%', maxHeight: '450px' }}
+            className="w-full h-full"
           />
         </motion.div>
       )}

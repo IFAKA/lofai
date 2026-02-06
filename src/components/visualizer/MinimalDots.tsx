@@ -4,6 +4,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAudioAnalyzer } from '@/lib/audio/useAudioAnalyzer';
 import type { VisualizerProps } from './types';
+import { useMousePosition } from '@/lib/hooks/useMousePosition';
 
 interface Dot {
   baseX: number;
@@ -31,11 +32,13 @@ const createDots = (w: number, h: number): Dot[] =>
 
 export const MinimalDots = memo(function MinimalDots({ isPlaying }: VisualizerProps) {
   const { bass, mids, highs, overall } = useAudioAnalyzer(isPlaying);
+  const mouseRef = useMousePosition();
   const [hasEverPlayed, setHasEverPlayed] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dotsRef = useRef<Dot[]>([]);
   const audioRef = useRef({ bass: 0, mids: 0, highs: 0, overall: 0 });
   const dimsRef = useRef({ w: 0, h: 0 });
+  const rectRef = useRef<DOMRect | null>(null);
 
   audioRef.current = { bass, mids, highs, overall };
 
@@ -59,6 +62,7 @@ export const MinimalDots = memo(function MinimalDots({ isPlaying }: VisualizerPr
       canvas.width = dimsRef.current.w * dpr;
       canvas.height = dimsRef.current.h * dpr;
       dotsRef.current = createDots(dimsRef.current.w, dimsRef.current.h);
+      rectRef.current = canvas.getBoundingClientRect();
     };
     resize();
     window.addEventListener('resize', resize);
@@ -81,6 +85,12 @@ export const MinimalDots = memo(function MinimalDots({ isPlaying }: VisualizerPr
       const t = Date.now() * 0.001;
       const dots = dotsRef.current;
 
+      // Mouse position in canvas coords
+      const rect = rectRef.current;
+      const mx = rect ? mouseRef.current.x - rect.left : -9999;
+      const my = rect ? mouseRef.current.y - rect.top : -9999;
+      const mouseActive = mouseRef.current.active && mx >= 0 && mx <= w && my >= 0 && my <= h;
+
       // Compute positions - wider motion range driven by audio
       for (let i = 0; i < dots.length; i++) {
         const d = dots[i];
@@ -96,6 +106,20 @@ export const MinimalDots = memo(function MinimalDots({ isPlaying }: VisualizerPr
           + Math.cos(t * d.speed * 0.8 + d.phase) * 18 * energy
           + Math.sin(t * d.speed * 0.4 + d.phase * 1.5) * 10 * energy
           + Math.cos(d.phase + t * 1.5) * bandVal * 14;
+      }
+
+      // Mouse repulsion (gentle)
+      if (mouseActive) {
+        for (let i = 0; i < dots.length; i++) {
+          const dx = posX[i] - mx;
+          const dy = posY[i] - my;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 100 && dist > 0) {
+            const force = (1 - dist / 100) * 12;
+            posX[i] += (dx / dist) * force;
+            posY[i] += (dy / dist) * force;
+          }
+        }
       }
 
       // Draw connections - pulse width on bass
@@ -152,6 +176,15 @@ export const MinimalDots = memo(function MinimalDots({ isPlaying }: VisualizerPr
       cg.addColorStop(1, 'transparent');
       ctx.fillStyle = cg;
       ctx.fillRect(0, 0, w, h);
+
+      // Cursor glow
+      if (mouseActive) {
+        const mg = ctx.createRadialGradient(mx, my, 0, mx, my, 60);
+        mg.addColorStop(0, 'hsla(270, 80%, 70%, 0.1)');
+        mg.addColorStop(1, 'transparent');
+        ctx.fillStyle = mg;
+        ctx.fillRect(mx - 60, my - 60, 120, 120);
+      }
     };
 
     rafId = requestAnimationFrame(loop);

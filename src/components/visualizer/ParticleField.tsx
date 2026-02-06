@@ -4,6 +4,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAudioAnalyzer } from '@/lib/audio/useAudioAnalyzer';
 import type { VisualizerProps } from './types';
+import { useMousePosition } from '@/lib/hooks/useMousePosition';
 
 interface Particle {
   x: number;
@@ -20,12 +21,14 @@ const MAX_PARTICLES = 80;
 
 export const ParticleField = memo(function ParticleField({ isPlaying, bpm }: VisualizerProps) {
   const { bass, mids, highs, overall } = useAudioAnalyzer(isPlaying);
+  const mouseRef = useMousePosition();
   const [hasEverPlayed, setHasEverPlayed] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const particlesRef = useRef<Particle[]>([]);
   const audioRef = useRef({ bass: 0, mids: 0, highs: 0, overall: 0, bpm: 78 });
   const playingRef = useRef(isPlaying);
   const dimsRef = useRef({ w: 0, h: 0 });
+  const rectRef = useRef<DOMRect | null>(null);
 
   audioRef.current = { bass, mids, highs, overall, bpm };
   playingRef.current = isPlaying;
@@ -49,6 +52,7 @@ export const ParticleField = memo(function ParticleField({ isPlaying, bpm }: Vis
       dimsRef.current.h = canvas.offsetHeight;
       canvas.width = dimsRef.current.w * dpr;
       canvas.height = dimsRef.current.h * dpr;
+      rectRef.current = canvas.getBoundingClientRect();
     };
     resize();
     window.addEventListener('resize', resize);
@@ -81,6 +85,12 @@ export const ParticleField = memo(function ParticleField({ isPlaying, bpm }: Vis
       const { bass: b, mids: m, highs: hi, overall: o, bpm: abpm } = audioRef.current;
       const bpmMult = Math.max(0.6, abpm / 80);
 
+      // Mouse position in canvas coords
+      const rect = rectRef.current;
+      const mx = rect ? mouseRef.current.x - rect.left : -9999;
+      const my = rect ? mouseRef.current.y - rect.top : -9999;
+      const mouseActive = mouseRef.current.active && mx >= 0 && mx <= w && my >= 0 && my <= h;
+
       // Spawn - faster on audio energy, burst on strong bass
       if (playingRef.current && particlesRef.current.length < MAX_PARTICLES) {
         const rate = Math.max(1, Math.floor(1 + b * 3 + o * 2));
@@ -108,6 +118,19 @@ export const ParticleField = memo(function ParticleField({ isPlaying, bpm }: Vis
         // Audio-reactive velocity
         p.vy -= (0.01 + hi * 0.008) * bpmMult;
         p.vx += (Math.random() - 0.5) * 0.05 + Math.sin(Date.now() * 0.002 + p.hue) * m * 0.02;
+
+        // Mouse repulsion (gentle)
+        if (mouseActive) {
+          const dx = p.x - mx;
+          const dy = p.y - my;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 100 && dist > 0) {
+            const force = (1 - dist / 100) * 0.5;
+            p.vx += (dx / dist) * force;
+            p.vy += (dy / dist) * force;
+          }
+        }
+
         p.x += p.vx * bpmMult;
         p.y += p.vy * bpmMult;
 
@@ -145,6 +168,15 @@ export const ParticleField = memo(function ParticleField({ isPlaying, bpm }: Vis
 
         return true;
       });
+
+      // Cursor glow
+      if (mouseActive) {
+        const cg = ctx.createRadialGradient(mx, my, 0, mx, my, 70);
+        cg.addColorStop(0, 'hsla(270, 80%, 70%, 0.1)');
+        cg.addColorStop(1, 'transparent');
+        ctx.fillStyle = cg;
+        ctx.fillRect(mx - 70, my - 70, 140, 140);
+      }
     };
 
     rafId = requestAnimationFrame(loop);
