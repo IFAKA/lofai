@@ -1,7 +1,7 @@
 {
-  "name": "LofAI - AI Lofi Music Generator",
-  "short_name": "LofAI",
-  "description": "AI-generated lofi music that learns your taste",
+  "name": "Seedtone - AI Music Generator",
+  "short_name": "Seedtone",
+  "description": "AI-generated music that learns your taste",
   "start_url": "/",
   "display": "fullscreen",
   "background_color": "#0a0a0f",

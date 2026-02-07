@@ -1,12 +1,12 @@
-# LofAI
+# Seedtone
 
-AI-generated lofi music that learns your taste. No playlists, no searching — just press play.
+AI-generated music that learns your taste. No playlists, no searching — just press play.
 
-![LofAI](https://img.shields.io/badge/AI-Powered-purple) ![PWA](https://img.shields.io/badge/PWA-Ready-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
+![Seedtone](https://img.shields.io/badge/AI-Powered-purple) ![PWA](https://img.shields.io/badge/PWA-Ready-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
 
-## What Makes LofAI Different
+## What Makes Seedtone Different
 
-Unlike traditional music apps that rely on pre-made playlists or simple shuffle algorithms, LofAI **generates unique tracks in real-time** and **learns your preferences** using machine learning — creating a truly personalized, infinite listening experience.
+Unlike traditional music apps that rely on pre-made playlists or simple shuffle algorithms, Seedtone **generates unique tracks in real-time** and **learns your preferences** using machine learning — creating a truly personalized, infinite listening experience.
 
 ### Key Features
 
@@ -23,7 +23,7 @@ Unlike traditional music apps that rely on pre-made playlists or simple shuffle 
 
 ### Thompson Sampling for Personalization
 
-LofAI uses a **multi-armed bandit algorithm** (Thompson Sampling) to balance exploration vs. exploitation when generating music. Each track is generated from 5 musical dimensions:
+Seedtone uses a **multi-armed bandit algorithm** (Thompson Sampling) to balance exploration vs. exploitation when generating music. Each track is generated from 5 musical dimensions:
 
 | Dimension | Arms | Description |
 |-----------|------|-------------|
@@ -55,7 +55,7 @@ The algorithm uses **Marsaglia-Tsang's method** for gamma variate sampling to pr
 
 ### Melody Generation with Magenta.js
 
-LofAI integrates Google's **MusicRNN** model for chord-conditioned melody generation:
+Seedtone integrates Google's **MusicRNN** model for chord-conditioned melody generation:
 
 1. Generate a chord progression based on valence/mode parameters
 2. Feed chords to MusicRNN as conditioning
@@ -153,7 +153,7 @@ Open [http://localhost:3000](http://localhost:3000) and press play.
 
 ## How It Learns
 
-LofAI improves with every song:
+Seedtone improves with every song:
 
 1. **Implicit feedback**: The system tracks how long you listen. Finishing a track = positive signal. Skipping early = negative signal.
 

@@ -15,7 +15,7 @@ Requirements:
 
 Usage:
     cd ACE-Step-1.5
-    uv run python ../lofai/scripts/generate-samples.py
+    uv run python ../seedtone/scripts/generate-samples.py
 
 Your Mac M4 Pro with 48GB RAM will run this easily.
 """
@@ -370,7 +370,7 @@ SETUP INSTRUCTIONS:
 4. Open http://localhost:7860 in your browser
 
 5. Use the prompts below to generate each sample, then save to:
-   /Users/iskaypet/code/no-work/web/lofai/public/samples/lofi/
+   public/samples/lofi/
 
 ═══════════════════════════════════════════════════════════════════════════════
 SAMPLE PROMPTS TO GENERATE:

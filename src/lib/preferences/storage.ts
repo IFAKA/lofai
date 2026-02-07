@@ -7,7 +7,7 @@ import {
 } from './types';
 import type { GenreId } from '@/lib/audio/generative/genreConfig';
 
-interface LofaiDB extends DBSchema {
+interface SeedtoneDB extends DBSchema {
   armState: {
     key: string;
     value: ArmState;
@@ -32,14 +32,14 @@ interface LofaiDB extends DBSchema {
   };
 }
 
-const DB_NAME = 'lofai-db';
+const DB_NAME = 'seedtone-db';
 const DB_VERSION = 1;
 
-let dbPromise: Promise<IDBPDatabase<LofaiDB>> | null = null;
+let dbPromise: Promise<IDBPDatabase<SeedtoneDB>> | null = null;
 
-export async function getDB(): Promise<IDBPDatabase<LofaiDB>> {
+export async function getDB(): Promise<IDBPDatabase<SeedtoneDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<LofaiDB>(DB_NAME, DB_VERSION, {
+    dbPromise = openDB<SeedtoneDB>(DB_NAME, DB_VERSION, {
       upgrade(db) {
         if (!db.objectStoreNames.contains('armState')) {
           db.createObjectStore('armState');

@@ -1,6 +1,6 @@
 # Audio Samples Directory
 
-This directory contains audio samples for LofAI's sampled instruments.
+This directory contains audio samples for Seedtone's sampled instruments.
 
 ## Directory Structure
 

@@ -15,17 +15,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'LofAI - AI Lofi Music Generator',
-  description: 'AI-generated lofi music that learns your taste. No playlists, no searching — just press play.',
+  title: 'Seedtone - AI Music Generator',
+  description: 'AI-generated music that learns your taste. No playlists, no searching — just press play.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'LofAI',
+    title: 'Seedtone',
   },
   openGraph: {
-    title: 'LofAI - AI Lofi Music Generator',
-    description: 'AI-generated lofi music that learns your taste',
+    title: 'Seedtone - AI Music Generator',
+    description: 'AI-generated music that learns your taste',
     type: 'website',
   },
 };

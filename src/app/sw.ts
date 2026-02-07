@@ -15,7 +15,7 @@ declare const self: ServiceWorkerGlobalScope;
 const samplesCacheStrategy: RuntimeCaching = {
   matcher: ({ url }) => url.pathname.startsWith('/samples/'),
   handler: new CacheFirst({
-    cacheName: 'lofai-samples',
+    cacheName: 'seedtone-samples',
   }),
 };
 

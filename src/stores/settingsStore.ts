@@ -163,7 +163,7 @@ export const useSettingsStore = create<SettingsStore>()(
       },
     }),
     {
-      name: 'lofai-settings',
+      name: 'seedtone-settings',
       version: 1,
       partialize: (state) => ({
         genre: state.genre,

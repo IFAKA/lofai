@@ -101,8 +101,8 @@ class AudioEngine {
 
     mediaSession.updateMetadata({
       title: `${genreConfig.label} in ${genState.key}`,
-      artist: 'LofAI Generative',
-      album: `LofAI - ${genreConfig.label}`,
+      artist: 'Seedtone Generative',
+      album: `Seedtone - ${genreConfig.label}`,
     });
 
     this.notifyListeners();
@@ -130,8 +130,8 @@ class AudioEngine {
 
     mediaSession.updateMetadata({
       title: `${genreConfig.label} in ${genState.key}`,
-      artist: 'LofAI Generative',
-      album: `LofAI - ${genreConfig.label}`,
+      artist: 'Seedtone Generative',
+      album: `Seedtone - ${genreConfig.label}`,
     });
 
     mediaSession.setPlaybackState('playing');
@@ -193,8 +193,8 @@ class AudioEngine {
 
       mediaSession.updateMetadata({
         title: `${genreConfig.label} in ${genState.key}`,
-        artist: 'LofAI Generative',
-        album: `LofAI - ${genreConfig.label}`,
+        artist: 'Seedtone Generative',
+        album: `Seedtone - ${genreConfig.label}`,
       });
 
       this.notifyListeners();

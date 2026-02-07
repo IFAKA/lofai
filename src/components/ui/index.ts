@@ -1,4 +1,4 @@
-// lofai custom components
+// seedtone custom components
 export { GlassButton } from './GlassButton';
 export { FocusMode } from './FocusMode';
 export { FullscreenOverlay } from './Modal';

@@ -173,7 +173,7 @@ export function Player() {
 
   useEffect(() => {
     const hasSeenOnboarding =
-      localStorage.getItem("lofai-onboarding-complete") === "true";
+      localStorage.getItem("seedtone-onboarding-complete") === "true";
     if (!hasSeenOnboarding) {
       startOnboarding();
     }

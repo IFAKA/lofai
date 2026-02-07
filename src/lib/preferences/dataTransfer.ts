@@ -24,12 +24,12 @@ export async function exportAllData(): Promise<ExportData> {
   // Collect settings from localStorage (persisted by zustand)
   const settings: Record<string, unknown> = {};
   try {
-    const settingsRaw = localStorage.getItem('lofai-settings');
+    const settingsRaw = localStorage.getItem('seedtone-settings');
     if (settingsRaw) {
       settings.zustand = JSON.parse(settingsRaw);
     }
 
-    const onboardingComplete = localStorage.getItem('lofai-onboarding-complete');
+    const onboardingComplete = localStorage.getItem('seedtone-onboarding-complete');
     if (onboardingComplete) {
       settings.onboardingComplete = onboardingComplete === 'true';
     }
@@ -55,7 +55,7 @@ export function downloadJson(data: ExportData): void {
 
   const a = document.createElement('a');
   a.href = url;
-  a.download = `lofai-data-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `seedtone-data-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -101,11 +101,11 @@ export async function importAllData(data: ExportData): Promise<void> {
   // Import settings to localStorage
   try {
     if (data.settings?.zustand) {
-      localStorage.setItem('lofai-settings', JSON.stringify(data.settings.zustand));
+      localStorage.setItem('seedtone-settings', JSON.stringify(data.settings.zustand));
     }
 
     if (typeof data.settings?.onboardingComplete === 'boolean') {
-      localStorage.setItem('lofai-onboarding-complete', String(data.settings.onboardingComplete));
+      localStorage.setItem('seedtone-onboarding-complete', String(data.settings.onboardingComplete));
     }
   } catch {
     // localStorage may not be available in test/SSR environments

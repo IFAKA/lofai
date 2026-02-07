@@ -3,7 +3,7 @@
 :root {
   color-scheme: dark;
 
-  /* Original lofai colors */
+  /* Original seedtone colors */
   --bg: #0a0a0f;
   --surface: #1a1a2e;
   --surface-elevated: #252542;
@@ -27,7 +27,7 @@
   --space-7: 48px;
   --space-8: 64px;
 
-  /* shadcn/ui variables mapped to lofai theme */
+  /* shadcn/ui variables mapped to seedtone theme */
   --radius: 0.75rem;
   --background: #0a0a0f;
   --foreground: rgba(255, 255, 255, 0.87);
@@ -56,7 +56,7 @@
 }
 
 @theme inline {
-  /* Original lofai color mappings */
+  /* Original seedtone color mappings */
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-elevated: var(--surface-elevated);

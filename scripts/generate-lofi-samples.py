@@ -2,12 +2,12 @@
 """
 Lo-Fi Sample Generator using ACE-Step 1.5 Programmatic API
 
-This script generates all lofi samples for the lofai web app using ACE-Step's
+This script generates all lofi samples for the seedtone web app using ACE-Step's
 Python API instead of the Gradio UI.
 
 Usage:
     cd /Users/iskaypet/code/no-work/web/ACE-Step-1.5
-    uv run python ../lofai/scripts/generate-lofi-samples.py
+    uv run python ../seedtone/scripts/generate-lofi-samples.py
 
 Requirements:
     - ACE-Step 1.5 installed and checkpoints downloaded
@@ -24,7 +24,7 @@ ACE_STEP_DIR = Path("/Users/iskaypet/code/no-work/web/ACE-Step-1.5")
 sys.path.insert(0, str(ACE_STEP_DIR))
 
 # Output directory for samples
-OUTPUT_DIR = Path("/Users/iskaypet/code/no-work/web/lofai/public/samples/lofi")
+OUTPUT_DIR = Path(__file__).parent.parent / "public" / "samples" / "lofi"
 
 # ============================================================================
 # SAMPLE DEFINITIONS - Optimized for ACE-Step text2music

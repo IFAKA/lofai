@@ -53,7 +53,7 @@ class MediaSessionManager {
     navigator.mediaSession.metadata = new window.MediaMetadata({
       title: metadata.title,
       artist: metadata.artist,
-      album: metadata.album ?? 'LofAI',
+      album: metadata.album ?? 'Seedtone',
       artwork: metadata.artwork ?? defaultArtwork,
     });
   }

@@ -73,7 +73,7 @@ export const useUIStore = create<UIStore>()(
       },
 
       completeOnboarding: () => {
-        localStorage.setItem('lofai-onboarding-complete', 'true');
+        localStorage.setItem('seedtone-onboarding-complete', 'true');
         set({ showOnboarding: false });
       },
 
@@ -86,7 +86,7 @@ export const useUIStore = create<UIStore>()(
       },
     }),
     {
-      name: 'lofai-ui',
+      name: 'seedtone-ui',
       partialize: (state) => ({
         showLearningIndicator: state.showLearningIndicator,
       }),
