@@ -35,6 +35,7 @@ export interface SongLog {
   skipped: boolean;
   explicitFeedback?: 'like' | 'dislike';
   reward?: number;
+  genre?: string;
 }
 
 export interface FeedbackEvent {

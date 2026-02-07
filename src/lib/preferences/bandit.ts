@@ -9,6 +9,7 @@ import {
 } from './types';
 import { getArmState, saveArmState } from './storage';
 import { useSettingsStore, getAllowedTempoArms } from '@/stores/settingsStore';
+import type { GenreId } from '@/lib/audio/generative/genreConfig';
 
 function gammaVariate(shape: number): number {
   if (shape < 1) {
@@ -89,12 +90,12 @@ export function selectArm<T extends string>(
   return bestArm!;
 }
 
-export async function selectGenerationParams(): Promise<GenerationParams> {
-  const armState = await getArmState();
+export async function selectGenerationParams(genre?: GenreId): Promise<GenerationParams> {
+  const { bpmMin, bpmMax, explorationLevel, genre: storeGenre } = useSettingsStore.getState();
+  const activeGenre = genre ?? storeGenre;
+  const armState = await getArmState(activeGenre);
 
-  const { bpmMin, bpmMax, explorationLevel } = useSettingsStore.getState();
-
-  const allowedTempoArms = getAllowedTempoArms(bpmMin, bpmMax) as TempoArm[];
+  const allowedTempoArms = getAllowedTempoArms(bpmMin, bpmMax, activeGenre) as TempoArm[];
 
   return {
     tempo: selectArm<TempoArm>(armState.tempo, allowedTempoArms, explorationLevel),
@@ -115,9 +116,11 @@ export function updateArmDist(dist: ArmDistribution, reward: number): ArmDistrib
 
 export async function updateArmsForSong(
   params: GenerationParams,
-  reward: number
+  reward: number,
+  genre?: GenreId
 ): Promise<void> {
-  const armState = await getArmState();
+  const activeGenre = genre ?? useSettingsStore.getState().genre;
+  const armState = await getArmState(activeGenre);
 
   armState.tempo[params.tempo] = updateArmDist(armState.tempo[params.tempo], reward);
   armState.energy[params.energy] = updateArmDist(armState.energy[params.energy], reward);
@@ -125,11 +128,12 @@ export async function updateArmsForSong(
   armState.danceability[params.danceability] = updateArmDist(armState.danceability[params.danceability], reward);
   armState.mode[params.mode] = updateArmDist(armState.mode[params.mode], reward);
 
-  await saveArmState(armState);
+  await saveArmState(armState, activeGenre);
 }
 
-export async function getExploitationRatio(): Promise<number> {
-  const armState = await getArmState();
+export async function getExploitationRatio(genre?: GenreId): Promise<number> {
+  const activeGenre = genre ?? useSettingsStore.getState().genre;
+  const armState = await getArmState(activeGenre);
 
   let totalConfidence = 0;
   let armCount = 0;
@@ -152,8 +156,9 @@ export async function getExploitationRatio(): Promise<number> {
   return totalConfidence / armCount;
 }
 
-export async function getCurrentBestParams(): Promise<GenerationParams> {
-  const armState = await getArmState();
+export async function getCurrentBestParams(genre?: GenreId): Promise<GenerationParams> {
+  const activeGenre = genre ?? useSettingsStore.getState().genre;
+  const armState = await getArmState(activeGenre);
 
   const getBest = <T extends string>(arms: Record<T, ArmDistribution>): T => {
     let best: T | null = null;
@@ -179,7 +184,8 @@ export async function getCurrentBestParams(): Promise<GenerationParams> {
   };
 }
 
-export async function resetArms(): Promise<void> {
+export async function resetArms(genre?: GenreId): Promise<void> {
+  const activeGenre = genre ?? useSettingsStore.getState().genre;
   const { createDefaultArmState } = await import('./types');
-  await saveArmState(createDefaultArmState());
+  await saveArmState(createDefaultArmState(), activeGenre);
 }

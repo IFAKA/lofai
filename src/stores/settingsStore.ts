@@ -1,10 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { VisualizerType } from '@/components/visualizer/types';
+import type { GenreId } from '@/lib/audio/generative/genreConfig';
+import { getGenreConfig } from '@/lib/audio/generative/genreConfig';
 
 export type NoiseType = 'off' | 'white' | 'pink' | 'brown';
 
 interface SettingsStore {
+  genre: GenreId;
   bpmMin: number;
   bpmMax: number;
 
@@ -25,6 +28,7 @@ interface SettingsStore {
   showAdvancedSettings: boolean;
   visualizerType: VisualizerType;
 
+  setGenre: (genre: GenreId) => void;
   setBpmRange: (min: number, max: number) => void;
   setExplorationLevel: (level: number) => void;
   setSleepTimer: (minutes: number | null) => void;
@@ -46,6 +50,7 @@ interface SettingsStore {
 export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set) => ({
+      genre: 'lofi' as GenreId,
       bpmMin: 60,
       bpmMax: 72,
 
@@ -66,11 +71,22 @@ export const useSettingsStore = create<SettingsStore>()(
       showAdvancedSettings: false,
       visualizerType: 'lava' as VisualizerType,
 
-      setBpmRange: (min, max) => {
-        const clampedMin = Math.max(60, Math.min(100, min));
-        const clampedMax = Math.max(clampedMin, Math.min(100, max));
-        set({ bpmMin: clampedMin, bpmMax: clampedMax });
+      setGenre: (genre) => {
+        const config = getGenreConfig(genre);
+        set({
+          genre,
+          bpmMin: config.bpmSliderRange.min,
+          bpmMax: config.bpmSliderRange.max,
+        });
       },
+
+      setBpmRange: (min, max) => set((state) => {
+        const config = getGenreConfig(state.genre);
+        const range = config.bpmSliderRange;
+        const clampedMin = Math.max(range.min, Math.min(range.max, min));
+        const clampedMax = Math.max(clampedMin, Math.min(range.max, max));
+        return { bpmMin: clampedMin, bpmMax: clampedMax };
+      }),
 
       setExplorationLevel: (level) => {
         set({ explorationLevel: Math.max(0, Math.min(1, level)) });
@@ -148,7 +164,9 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'lofai-settings',
+      version: 1,
       partialize: (state) => ({
+        genre: state.genre,
         bpmMin: state.bpmMin,
         bpmMax: state.bpmMax,
         explorationLevel: state.explorationLevel,
@@ -159,23 +177,43 @@ export const useSettingsStore = create<SettingsStore>()(
         showAdvancedSettings: state.showAdvancedSettings,
         visualizerType: state.visualizerType,
       }),
+      migrate: (persisted: unknown) => {
+        const state = persisted as Record<string, unknown>;
+        // Reset any non-lofi genre to lofi
+        if (state.genre && state.genre !== 'lofi') {
+          state.genre = 'lofi';
+          const config = getGenreConfig('lofi');
+          state.bpmMin = config.bpmSliderRange.min;
+          state.bpmMax = config.bpmSliderRange.max;
+        }
+        return state as unknown as SettingsStore;
+      },
     }
   )
 );
 
-export function getAllowedTempoArms(bpmMin: number, bpmMax: number): string[] {
+export function getAllowedTempoArms(bpmMin: number, bpmMax: number, genre?: GenreId): string[] {
+  const config = getGenreConfig(genre ?? 'lofi');
+  const ranges = config.tempo.ranges;
   const arms: string[] = [];
+  const armKeys = Object.keys(ranges) as string[];
 
-  if (bpmMin <= 72 && bpmMax >= 60) arms.push('focus');
-  if (bpmMin <= 78 && bpmMax >= 70) arms.push('60-70');
-  if (bpmMin <= 86 && bpmMax >= 78) arms.push('70-80');
-  if (bpmMin <= 94 && bpmMax >= 86) arms.push('80-90');
-  if (bpmMin <= 102 && bpmMax >= 94) arms.push('90-100');
+  for (const arm of armKeys) {
+    const range = ranges[arm as keyof typeof ranges];
+    if (bpmMin <= range.max && bpmMax >= range.min) {
+      arms.push(arm);
+    }
+  }
 
   if (arms.length === 0) {
-    if (bpmMax < 72) return ['focus'];
-    if (bpmMin > 94) return ['90-100'];
-    return ['70-80'];
+    // Find the closest arm
+    const firstArm = armKeys[0];
+    const lastArm = armKeys[armKeys.length - 1];
+    const firstRange = ranges[firstArm as keyof typeof ranges];
+    const lastRange = ranges[lastArm as keyof typeof ranges];
+    if (bpmMax < firstRange.min) return [firstArm];
+    if (bpmMin > lastRange.max) return [lastArm];
+    return [armKeys[Math.floor(armKeys.length / 2)]];
   }
 
   return arms;

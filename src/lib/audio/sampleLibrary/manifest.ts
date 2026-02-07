@@ -424,10 +424,6 @@ export const lofiPack: SamplePack = {
 // Registry of all available packs
 export const samplePacks: Record<Genre, SamplePack> = {
   lofi: lofiPack,
-  // Future packs:
-  jazz: lofiPack,     // Placeholder - will be replaced
-  ambient: lofiPack,  // Placeholder - will be replaced
-  chillhop: lofiPack, // Placeholder - will be replaced
 };
 
 /**

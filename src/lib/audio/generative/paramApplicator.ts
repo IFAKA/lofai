@@ -8,6 +8,7 @@ import {
   DANCEABILITY_PARAMS,
   VALENCE_PARAMS,
 } from '@/lib/preferences/types';
+import type { TempoConfig } from './genreConfig';
 
 export interface TempoResult {
   bpm: number;
@@ -30,10 +31,12 @@ export interface ValenceResult {
   preferMinor: boolean;
 }
 
-export function computeTempoParams(tempoArm: TempoArm): TempoResult {
-  const range = TEMPO_RANGES[tempoArm];
+export function computeTempoParams(tempoArm: TempoArm, tempoConfig?: TempoConfig): TempoResult {
+  const ranges = tempoConfig?.ranges ?? TEMPO_RANGES;
+  const multiplier = tempoConfig?.multiplier ?? 2;
+  const range = ranges[tempoArm];
   const targetBpm = range.min + Math.random() * (range.max - range.min);
-  return { bpm: Math.round(targetBpm * 2) };
+  return { bpm: Math.round(targetBpm * multiplier) };
 }
 
 export function computeEnergyParams(energyArm: EnergyArm): EnergyResult {

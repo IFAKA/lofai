@@ -5,10 +5,11 @@ import {
   FeedbackEvent,
   createDefaultArmState,
 } from './types';
+import type { GenreId } from '@/lib/audio/generative/genreConfig';
 
 interface LofaiDB extends DBSchema {
   armState: {
-    key: 'current';
+    key: string;
     value: ArmState;
   };
   songLogs: {
@@ -70,15 +71,34 @@ export async function getDB(): Promise<IDBPDatabase<LofaiDB>> {
   return dbPromise;
 }
 
-export async function getArmState(): Promise<ArmState> {
-  const db = await getDB();
-  const state = await db.get('armState', 'current');
-  return state ?? createDefaultArmState();
+function armStateKey(genre?: GenreId): string {
+  // 'lofi' uses 'current' for backward compatibility with existing data
+  if (!genre || genre === 'lofi') return 'current';
+  return genre;
 }
 
-export async function saveArmState(state: ArmState): Promise<void> {
+export async function getArmState(genre?: GenreId): Promise<ArmState> {
   const db = await getDB();
-  await db.put('armState', state, 'current');
+  const key = armStateKey(genre);
+  const state = await db.get('armState', key);
+  if (state) return state;
+  return createDefaultArmState();
+}
+
+export async function saveArmState(state: ArmState, genre?: GenreId): Promise<void> {
+  const db = await getDB();
+  await db.put('armState', state, armStateKey(genre));
+}
+
+export async function getAllArmStates(): Promise<Record<string, ArmState>> {
+  const db = await getDB();
+  const keys = await db.getAllKeys('armState');
+  const result: Record<string, ArmState> = {};
+  for (const key of keys) {
+    const state = await db.get('armState', key);
+    if (state) result[key] = state;
+  }
+  return result;
 }
 
 export async function saveSongLog(log: SongLog): Promise<void> {

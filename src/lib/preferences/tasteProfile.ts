@@ -1,10 +1,14 @@
 import type { GenerationParams } from './types';
 import { getArmState } from './storage';
+import type { GenreId } from '@/lib/audio/generative/genreConfig';
+import { getGenreConfig } from '@/lib/audio/generative/genreConfig';
+import { useSettingsStore } from '@/stores/settingsStore';
 
 export interface TasteProfile {
   version: 1;
   topArms: GenerationParams;
   summary: string;
+  genre?: string;
 }
 
 function getTopArm<T extends string>(arms: Record<T, { alpha: number; beta: number }>): T {
@@ -52,7 +56,9 @@ function buildSummary(params: GenerationParams): string {
 }
 
 export async function generateTasteProfile(): Promise<TasteProfile> {
-  const armState = await getArmState();
+  const genre = useSettingsStore.getState().genre;
+  const armState = await getArmState(genre);
+  const genreConfig = getGenreConfig(genre);
 
   const topArms: GenerationParams = {
     tempo: getTopArm(armState.tempo),
@@ -65,7 +71,8 @@ export async function generateTasteProfile(): Promise<TasteProfile> {
   return {
     version: 1,
     topArms,
-    summary: buildSummary(topArms),
+    summary: `${genreConfig.label}: ${buildSummary(topArms)}`,
+    genre: genreConfig.label,
   };
 }
 

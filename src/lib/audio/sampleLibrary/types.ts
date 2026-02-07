@@ -5,7 +5,7 @@
  * that can be mixed at runtime for endless, high-quality playback.
  */
 
-export type Genre = 'lofi' | 'jazz' | 'ambient' | 'chillhop';
+export type Genre = 'lofi';
 export type SampleCategory = 'loops' | 'chords' | 'drums' | 'melodies' | 'bass' | 'ambient';
 export type EnergyLevel = 'low' | 'medium' | 'high';
 export type Mood = 'chill' | 'melancholic' | 'uplifting' | 'dreamy';

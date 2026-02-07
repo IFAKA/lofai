@@ -12,13 +12,14 @@ import {
   clearSessionStartTime,
 } from './storage';
 import { updateArmsForSong } from './bandit';
+import type { GenreId } from '@/lib/audio/generative/genreConfig';
 
 function generateSongId(): string {
   return `song_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
 class FeedbackTracker {
-  private currentSong: SongLog | null = null;
+  private currentSong: (SongLog & { genre?: GenreId }) | null = null;
 
   getCurrentSong(): SongLog | null {
     return this.currentSong ? { ...this.currentSong } : null;
@@ -28,7 +29,7 @@ class FeedbackTracker {
     return this.currentSong !== null;
   }
 
-  async startTracking(params: GenerationParams, estimatedDuration: number): Promise<string> {
+  async startTracking(params: GenerationParams, estimatedDuration: number, genre?: GenreId): Promise<string> {
     const songId = generateSongId();
     const now = Date.now();
 
@@ -39,6 +40,7 @@ class FeedbackTracker {
       listenDuration: 0,
       totalDuration: estimatedDuration,
       skipped: false,
+      genre,
     };
 
     const sessionStart = await getSessionStartTime();
@@ -89,7 +91,7 @@ class FeedbackTracker {
       reward,
     };
     await saveFeedbackEvent(feedbackEvent);
-    await updateArmsForSong(this.currentSong.params, reward);
+    await updateArmsForSong(this.currentSong.params, reward, this.currentSong.genre);
     await saveSongLog(this.currentSong);
 
     const savedReward = this.currentSong.reward;
@@ -116,7 +118,7 @@ class FeedbackTracker {
       reward,
     };
     await saveFeedbackEvent(feedbackEvent);
-    await updateArmsForSong(this.currentSong.params, reward);
+    await updateArmsForSong(this.currentSong.params, reward, this.currentSong.genre);
   }
 
   async handleDislike(): Promise<void> {
@@ -134,7 +136,7 @@ class FeedbackTracker {
       reward,
     };
     await saveFeedbackEvent(feedbackEvent);
-    await updateArmsForSong(this.currentSong.params, reward);
+    await updateArmsForSong(this.currentSong.params, reward, this.currentSong.genre);
   }
 
   async checkSessionBonus(): Promise<boolean> {
@@ -153,7 +155,7 @@ class FeedbackTracker {
         reward,
       };
       await saveFeedbackEvent(feedbackEvent);
-      await updateArmsForSong(this.currentSong.params, reward);
+      await updateArmsForSong(this.currentSong.params, reward, this.currentSong.genre);
       await setSessionStartTime(Date.now());
 
       return true;
@@ -174,9 +176,10 @@ const feedbackTracker = new FeedbackTracker();
 
 export async function startSongTracking(
   params: GenerationParams,
-  estimatedDuration: number
+  estimatedDuration: number,
+  genre?: GenreId
 ): Promise<string> {
-  return feedbackTracker.startTracking(params, estimatedDuration);
+  return feedbackTracker.startTracking(params, estimatedDuration, genre);
 }
 
 export function updateListenDuration(duration: number): void {

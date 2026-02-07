@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { audioEngine, type NoiseType } from '@/lib/audio/engine';
 import { handleExplicitLike, handleExplicitDislike, isTrackingSong } from '@/lib/preferences/feedback';
+import type { GenreId } from '@/lib/audio/generative/genreConfig';
 
 interface AudioStore {
   isInitialized: boolean;
@@ -10,6 +11,7 @@ interface AudioStore {
   songId: string | null;
   progression: string[];
   progressIndex: number;
+  genre: GenreId;
 
   volume: number;
   isLoading: boolean;
@@ -27,6 +29,7 @@ interface AudioStore {
   setVolume: (volume: number) => void;
   setNoiseType: (type: NoiseType) => void;
   setNoiseVolume: (volume: number) => void;
+  setGenre: (genre: GenreId) => Promise<void>;
   like: () => Promise<void>;
   dislike: () => Promise<void>;
   clearError: () => void;
@@ -46,6 +49,7 @@ export const useAudioStore = create<AudioStore>((set, get) => {
         samplesLoaded: state.samplesLoaded,
         progression: state.progression,
         progressIndex: state.progressIndex,
+        genre: state.genre,
       });
     });
   }
@@ -58,6 +62,7 @@ export const useAudioStore = create<AudioStore>((set, get) => {
     songId: null,
     progression: [],
     progressIndex: 0,
+    genre: 'lofi' as GenreId,
     volume: 0.8,
     isLoading: false,
     isModelLoading: false,
@@ -135,6 +140,18 @@ export const useAudioStore = create<AudioStore>((set, get) => {
     setNoiseVolume: (volume: number) => {
       if (get().isInitialized) {
         audioEngine.setNoiseVolume(volume);
+      }
+    },
+
+    setGenre: async (genre: GenreId) => {
+      set({ isLoading: true });
+      try {
+        await audioEngine.setGenre(genre);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to switch genre';
+        set({ error: message });
+      } finally {
+        set({ isLoading: false });
       }
     },
 

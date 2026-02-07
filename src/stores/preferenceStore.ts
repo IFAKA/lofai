@@ -9,6 +9,7 @@ import {
   resetArms,
 } from '@/lib/preferences/bandit';
 import type { GenerationParams } from '@/lib/preferences/types';
+import { useSettingsStore } from './settingsStore';
 
 interface PreferenceStore {
   totalSongs: number;
@@ -37,11 +38,12 @@ export const usePreferenceStore = create<PreferenceStore>((set) => ({
   loadStats: async () => {
     set({ isLoading: true });
     try {
+      const genre = useSettingsStore.getState().genre;
       const [stats, songCount, exploitRatio, best] = await Promise.all([
         getListeningStats(),
         getSongCount(),
-        getExploitationRatio(),
-        getCurrentBestParams(),
+        getExploitationRatio(genre),
+        getCurrentBestParams(genre),
       ]);
 
       set({
@@ -60,7 +62,8 @@ export const usePreferenceStore = create<PreferenceStore>((set) => ({
   resetPreferences: async () => {
     set({ isLoading: true });
     try {
-      await resetArms();
+      const genre = useSettingsStore.getState().genre;
+      await resetArms(genre);
       await usePreferenceStore.getState().loadStats();
     } finally {
       set({ isLoading: false });

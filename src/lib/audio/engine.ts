@@ -7,6 +7,9 @@ import {
   updateListenDuration,
   isTrackingSong,
 } from '@/lib/preferences/feedback';
+import type { GenreId } from './generative/genreConfig';
+import { getGenreConfig } from './generative/genreConfig';
+import { useSettingsStore } from '@/stores/settingsStore';
 
 export type { NoiseType };
 
@@ -20,19 +23,21 @@ export interface EngineState {
   samplesLoading: boolean;
   progressIndex: number;
   progression: string[];
+  genre: GenreId;
 }
 
 class AudioEngine {
   private state: EngineState = {
     isInitialized: false,
     isPlaying: false,
-    bpm: 78, // Effective BPM (156 with swing)
+    bpm: 78,
     currentKey: 'C',
     songId: null,
     samplesLoaded: false,
     samplesLoading: false,
     progressIndex: 0,
     progression: [],
+    genre: 'lofi',
   };
 
   private stateListeners: Set<(state: EngineState) => void> = new Set();
@@ -51,11 +56,12 @@ class AudioEngine {
     generativeEngine.subscribe((genState) => {
       this.state.isPlaying = genState.isPlaying;
       this.state.currentKey = genState.key;
-      this.state.bpm = 78; // Effective BPM
+      this.state.bpm = genState.bpm;
       this.state.progressIndex = genState.progressIndex;
       this.state.progression = genState.progression.map(c => c.degree);
       this.state.samplesLoaded = genState.isLoaded;
       this.state.samplesLoading = !genState.isLoaded;
+      this.state.genre = genState.genre;
       this.notifyListeners();
     });
 
@@ -81,20 +87,22 @@ class AudioEngine {
     }
     this.stopDurationTracking();
 
-    const params = await selectGenerationParams();
+    const genre = useSettingsStore.getState().genre;
+    const params = await selectGenerationParams(genre);
     generativeEngine.applyGenerationParams(params);
     generativeEngine.skip();
 
-    const songId = await startSongTracking(params, 180);
+    const songId = await startSongTracking(params, 180, genre);
     this.state.songId = songId;
     this.startDurationTracking();
 
     const genState = generativeEngine.getState();
+    const genreConfig = getGenreConfig(genre);
 
     mediaSession.updateMetadata({
-      title: `Lofi in ${genState.key}`,
+      title: `${genreConfig.label} in ${genState.key}`,
       artist: 'LofAI Generative',
-      album: 'LofAI',
+      album: `LofAI - ${genreConfig.label}`,
     });
 
     this.notifyListeners();
@@ -105,10 +113,12 @@ class AudioEngine {
       await this.initialize();
     }
 
+    const genre = useSettingsStore.getState().genre;
+
     if (!isTrackingSong()) {
-      const params = await selectGenerationParams();
+      const params = await selectGenerationParams(genre);
       generativeEngine.applyGenerationParams(params);
-      const songId = await startSongTracking(params, 180);
+      const songId = await startSongTracking(params, 180, genre);
       this.state.songId = songId;
     }
 
@@ -116,11 +126,12 @@ class AudioEngine {
     this.startDurationTracking();
 
     const genState = generativeEngine.getState();
+    const genreConfig = getGenreConfig(genre);
 
     mediaSession.updateMetadata({
-      title: `Lofi in ${genState.key}`,
+      title: `${genreConfig.label} in ${genState.key}`,
       artist: 'LofAI Generative',
-      album: 'LofAI',
+      album: `LofAI - ${genreConfig.label}`,
     });
 
     mediaSession.setPlaybackState('playing');
@@ -145,6 +156,49 @@ class AudioEngine {
 
     generativeEngine.stop();
     mediaSession.setPlaybackState('none');
+  }
+
+  async setGenre(genre: GenreId): Promise<void> {
+    // End current song tracking
+    if (isTrackingSong()) {
+      try {
+        await endSongPlayback(true);
+      } catch {
+        // Ignore errors
+      }
+    }
+    this.stopDurationTracking();
+
+    // Update settings store
+    useSettingsStore.getState().setGenre(genre);
+
+    // Switch genre in generative engine
+    if (this.state.isInitialized) {
+      await generativeEngine.switchGenre(genre);
+
+      // Start new song with genre-appropriate params
+      const params = await selectGenerationParams(genre);
+      generativeEngine.applyGenerationParams(params);
+
+      const songId = await startSongTracking(params, 180, genre);
+      this.state.songId = songId;
+      this.state.genre = genre;
+
+      if (this.state.isPlaying) {
+        this.startDurationTracking();
+      }
+
+      const genState = generativeEngine.getState();
+      const genreConfig = getGenreConfig(genre);
+
+      mediaSession.updateMetadata({
+        title: `${genreConfig.label} in ${genState.key}`,
+        artist: 'LofAI Generative',
+        album: `LofAI - ${genreConfig.label}`,
+      });
+
+      this.notifyListeners();
+    }
   }
 
   setVolume(volume: number): void {

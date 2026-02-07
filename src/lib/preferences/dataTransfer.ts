@@ -1,12 +1,13 @@
-import { getDB } from './storage';
+import { getDB, getAllArmStates } from './storage';
 import type { ArmState, SongLog, FeedbackEvent } from './types';
 
-const EXPORT_VERSION = 1;
+const EXPORT_VERSION = 2;
 
 export interface ExportData {
   version: number;
   exportedAt: string;
   armState: ArmState | null;
+  armStates?: Record<string, ArmState>;
   songLogs: SongLog[];
   feedbackEvents: FeedbackEvent[];
   settings: Record<string, unknown>;
@@ -16,6 +17,7 @@ export async function exportAllData(): Promise<ExportData> {
   const db = await getDB();
 
   const armState = (await db.get('armState', 'current')) ?? null;
+  const armStates = await getAllArmStates();
   const songLogs = await db.getAll('songLogs');
   const feedbackEvents = await db.getAll('feedbackEvents');
 
@@ -39,6 +41,7 @@ export async function exportAllData(): Promise<ExportData> {
     version: EXPORT_VERSION,
     exportedAt: new Date().toISOString(),
     armState,
+    armStates,
     songLogs,
     feedbackEvents,
     settings,
@@ -75,8 +78,13 @@ export function validateImportData(data: unknown): data is ExportData {
 export async function importAllData(data: ExportData): Promise<void> {
   const db = await getDB();
 
-  // Import arm state
-  if (data.armState) {
+  // Import arm states (v2 format: per-genre)
+  if (data.armStates) {
+    for (const [key, state] of Object.entries(data.armStates)) {
+      await db.put('armState', state, key);
+    }
+  } else if (data.armState) {
+    // v1 backward compat: single arm state goes to 'current' (lofi)
     await db.put('armState', data.armState, 'current');
   }
 

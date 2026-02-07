@@ -102,8 +102,9 @@ export class ChordProgression {
   static generate(length: number): Chord[] {
     if (length < 2) return [];
 
+    const defs = CHORD_DEFS;
     const progression: Chord[] = [];
-    let chordDef = CHORD_DEFS[Math.floor(Math.random() * CHORD_DEFS.length)];
+    let chordDef = defs[Math.floor(Math.random() * defs.length)];
 
     for (let i = 0; i < length; i++) {
       progression.push(new Chord(
@@ -114,7 +115,7 @@ export class ChordProgression {
       ));
 
       const nextIdx = chordDef.nextChordIdxs[Math.floor(Math.random() * chordDef.nextChordIdxs.length)];
-      chordDef = CHORD_DEFS[nextIdx];
+      chordDef = defs[nextIdx];
     }
 
     return progression;

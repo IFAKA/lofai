@@ -1,5 +1,6 @@
 import { createDefaultArmState } from './types';
 import { saveArmState } from './storage';
+import type { GenreId } from '@/lib/audio/generative/genreConfig';
 
 export type TempoPreference = 'slower' | 'faster';
 export type EnergyPreference = 'chill' | 'energetic';
@@ -11,7 +12,7 @@ export interface OnboardingPreferences {
 
 const BOOST_AMOUNT = 3;
 
-export async function applyWarmStart(prefs: OnboardingPreferences): Promise<void> {
+export async function applyWarmStart(prefs: OnboardingPreferences, genre?: GenreId): Promise<void> {
   const state = createDefaultArmState();
 
   // Apply tempo preference
@@ -33,5 +34,5 @@ export async function applyWarmStart(prefs: OnboardingPreferences): Promise<void
     state.danceability.bouncy.alpha += BOOST_AMOUNT - 1;
   }
 
-  await saveArmState(state);
+  await saveArmState(state, genre);
 }

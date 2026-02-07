@@ -27,6 +27,7 @@ import {
 import { generateTasteProfile, getTasteProfileUrl } from '@/lib/preferences/tasteProfile';
 import { AnalyticsDashboard } from '../analytics/AnalyticsDashboard';
 import type { VisualizerType } from '../visualizer/types';
+import { getGenreConfig } from '@/lib/audio/generative/genreConfig';
 
 interface SettingsProps {
   isOpen: boolean;
@@ -102,6 +103,7 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
   } = usePreferenceStore();
 
   const {
+    genre,
     bpmMin,
     bpmMax,
     explorationLevel,
@@ -135,6 +137,8 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
   const [customFocusInput, setCustomFocusInput] = useState('');
   const [showCustomFocus, setShowCustomFocus] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
+
+  const genreConfig = getGenreConfig(genre);
 
   useEffect(() => {
     setLocalBpmMin(bpmMin);
@@ -512,8 +516,8 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
                       value={[localBpmMin]}
                       onValueChange={([v]) => setLocalBpmMin(v)}
                       onValueCommit={handleBpmMinCommit}
-                      min={60}
-                      max={100}
+                      min={genreConfig.bpmSliderRange.min}
+                      max={genreConfig.bpmSliderRange.max}
                       step={5}
                     />
                   </div>
@@ -527,8 +531,8 @@ export function Settings({ isOpen, onClose }: SettingsProps) {
                       value={[localBpmMax]}
                       onValueChange={([v]) => setLocalBpmMax(v)}
                       onValueCommit={handleBpmMaxCommit}
-                      min={60}
-                      max={100}
+                      min={genreConfig.bpmSliderRange.min}
+                      max={genreConfig.bpmSliderRange.max}
                       step={5}
                     />
                   </div>

@@ -1,4 +1,5 @@
 import * as Tone from 'tone';
+import type { SynthConfig, DrumSampleConfig } from './genreConfig';
 
 const SAMPLES_PATH = '/samples/engine';
 
@@ -17,33 +18,47 @@ export interface SynthResources {
   masterVol: Tone.Volume;
 }
 
-export async function createSynthResources(onSampleError: (msg: string) => void): Promise<SynthResources> {
+// Default synth config matching original lo-fi hardcoded values
+const DEFAULT_SYNTH_CONFIG: SynthConfig = {
+  pianoFilterFreq: 1000,
+  masterFilterFreq: 2000,
+  compressor: { threshold: -6, ratio: 3, attack: 0.5, release: 0.1 },
+  noiseDefaults: { type: 'pink', volume: 0.3 },
+  stereoWidth: 0.5,
+};
+
+export async function createSynthResources(
+  onSampleError: (msg: string) => void,
+  synthConfig?: SynthConfig
+): Promise<SynthResources> {
+  const config = synthConfig ?? DEFAULT_SYNTH_CONFIG;
+
   const compressor = new Tone.Compressor({
-    threshold: -6,
-    ratio: 3,
-    attack: 0.5,
-    release: 0.1,
+    threshold: config.compressor.threshold,
+    ratio: config.compressor.ratio,
+    attack: config.compressor.attack,
+    release: config.compressor.release,
   });
 
-  const masterFilter = new Tone.Filter(2000, 'lowpass');
+  const masterFilter = new Tone.Filter(config.masterFilterFreq, 'lowpass');
   const masterVol = new Tone.Volume(0);
 
   Tone.getDestination().chain(compressor, masterFilter, masterVol);
 
-  const pianoFilter = new Tone.Filter(1000, 'lowpass');
-  const stereoWidener = new Tone.StereoWidener(0.5);
+  const pianoFilter = new Tone.Filter(config.pianoFilterFreq, 'lowpass');
+  const stereoWidener = new Tone.StereoWidener(config.stereoWidth);
 
   const noiseFilter = new Tone.Filter(2000, 'lowshelf');
   const noiseVol = new Tone.Volume(-32);
-  const noise = new Tone.Noise('pink');
+  const noise = new Tone.Noise(config.noiseDefaults.type);
   noise.chain(noiseFilter, noiseVol, Tone.getDestination());
 
   const [piano, drums] = await Promise.all([
     loadPiano(pianoFilter, stereoWidener, onSampleError),
-    loadDrums(),
+    loadDrums(config.drumSamples),
   ]);
 
-  return {
+  const resources: SynthResources = {
     piano,
     kick: drums.kick,
     snare: drums.snare,
@@ -57,6 +72,8 @@ export async function createSynthResources(onSampleError: (msg: string) => void)
     masterFilter,
     masterVol,
   };
+
+  return resources;
 }
 
 function loadPiano(
@@ -90,8 +107,19 @@ function loadPiano(
   });
 }
 
-function loadDrums(): Promise<{ kick: Tone.Sampler; snare: Tone.Sampler; hat: Tone.Sampler }> {
+interface DrumLoadResult {
+  kick: Tone.Sampler;
+  snare: Tone.Sampler;
+  hat: Tone.Sampler;
+}
+
+function loadDrums(drumConfig?: DrumSampleConfig): Promise<DrumLoadResult> {
   return new Promise((resolve) => {
+    const path = drumConfig?.path ?? 'drums';
+    const kickVol = drumConfig?.kickVolume ?? 0;
+    const snareVol = drumConfig?.snareVolume ?? -4;
+    const hatVol = drumConfig?.hatVolume ?? -6;
+
     let loaded = 0;
     const checkLoaded = () => {
       loaded++;
@@ -99,21 +127,25 @@ function loadDrums(): Promise<{ kick: Tone.Sampler; snare: Tone.Sampler; hat: To
     };
 
     const kick = new Tone.Sampler({
-      urls: { C4: `${SAMPLES_PATH}/drums/kick.mp3` },
+      urls: { C4: `${SAMPLES_PATH}/${path}/kick.mp3` },
+      volume: kickVol,
       onload: checkLoaded,
-    }).toDestination();
+    });
+    kick.toDestination();
 
     const snare = new Tone.Sampler({
-      urls: { C4: `${SAMPLES_PATH}/drums/snare.mp3` },
-      volume: -4,
+      urls: { C4: `${SAMPLES_PATH}/${path}/snare.mp3` },
+      volume: snareVol,
       onload: checkLoaded,
-    }).toDestination();
+    });
+    snare.toDestination();
 
     const hat = new Tone.Sampler({
-      urls: { C4: `${SAMPLES_PATH}/drums/hat.mp3` },
-      volume: -6,
+      urls: { C4: `${SAMPLES_PATH}/${path}/hat.mp3` },
+      volume: hatVol,
       onload: checkLoaded,
-    }).toDestination();
+    });
+    hat.toDestination();
   });
 }
 

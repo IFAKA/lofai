@@ -16,7 +16,7 @@ describe('exportAllData', () => {
 
   it('returns data with correct structure', async () => {
     const data = await exportAllData();
-    expect(data.version).toBe(1);
+    expect(data.version).toBe(2);
     expect(data.exportedAt).toBeTruthy();
     expect(Array.isArray(data.songLogs)).toBe(true);
     expect(Array.isArray(data.feedbackEvents)).toBe(true);
